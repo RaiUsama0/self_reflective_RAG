@@ -7,5 +7,4 @@ data/subsets/
 results/
 .ipynb_checkpoints/
 .env
-.claude/
 .vscode/
