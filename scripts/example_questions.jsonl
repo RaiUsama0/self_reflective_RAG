@@ -1,0 +1,12 @@
+{"question": "What is the name of the hospital?", "answer": "CityCare General Hospital", "gold_doc_ids": ["test_0000"]}
+{"question": "Who is the medical director?", "answer": "Dr. Robert Evans", "gold_doc_ids": ["test_0000"]}
+{"question": "Who is the emergency department head?", "answer": "Dr. Olivia Brown", "gold_doc_ids": ["test_0001"]}
+{"question": "How many beds does the hospital have?", "answer": "450 beds", "gold_doc_ids": ["test_0002"]}
+{"question": "What are the MRI department's operating hours?", "answer": "Monday-Friday 8:00 AM - 6:00 PM", "gold_doc_ids": ["test_0003"]}
+{"question": "How many MRI machines does the hospital have?", "answer": "3", "gold_doc_ids": ["test_0003"]}
+{"question": "How long does it usually take to get COVID PCR results?", "answer": "within 24 hours", "gold_doc_ids": ["test_0003"]}
+{"question": "How long does it take to get blood test reports?", "answer": "within 6 hours", "gold_doc_ids": ["test_0004"]}
+{"question": "What are the weekday visiting hours?", "answer": "2 PM - 7 PM", "gold_doc_ids": ["test_0004"]}
+{"question": "What are the weekend visiting hours?", "answer": "10 AM - 7 PM", "gold_doc_ids": ["test_0005"]}
+{"question": "What is the ratio of hospital beds to MRI machines, how many total hours per week is the MRI department open, and who is the medical director?", "answer": "150:1 ratio, 50 hours per week, Dr. Robert Evans", "gold_doc_ids": ["test_0000", "test_0002", "test_0003"]}
+{"question": "What is the hospital's parking fee?", "answer": "not stated in the document", "gold_doc_ids": []}

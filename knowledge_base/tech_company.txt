@@ -1,0 +1,41 @@
+Company:
+Nexora AI
+
+Founded:
+2018
+
+CEO:
+Sarah Mitchell
+
+Employees:
+245
+
+Products
+
+InsightAI
+
+VisionFlow
+
+SecureVault
+
+Headquarters
+
+Manchester
+
+Cloud Provider
+
+Microsoft Azure
+
+Programming Languages
+
+Python
+
+Go
+
+TypeScript
+
+Annual AI Conference
+
+October
+
+Birmingham

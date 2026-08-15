@@ -1,0 +1,24 @@
+# ---- core (needed for everything, including the offline demo) ----
+numpy>=1.26
+scikit-learn>=1.4
+
+# ---- retrieval and models (needed for real experiments) ----
+torch>=2.2
+transformers>=4.40
+sentence-transformers>=3.0
+faiss-cpu>=1.8            # swap for faiss-gpu if your CUDA build supports it
+datasets==2.21.0          # pinned: >=4.0 dropped loading-script support that
+                          # hotpot_qa/fever on the Hub still require (see README)
+accelerate>=0.30
+
+# ---- listed in the project plan ----
+langchain>=0.2            # installed for the toolchain; the pipeline does not use it
+                          # (see README - the loop needs explicit per-iteration tracing)
+
+# ---- optional ----
+bitsandbytes>=0.43        # 4-bit loading when GPU memory is tight
+openai>=1.30              # only for --llm openai:<model> or a local vLLM endpoint
+matplotlib>=3.8           # plots
+pypdf>=4.0                # only for `ask --file *.pdf`; .txt/.md need nothing extra
+python-dotenv>=1.0        # auto-loads .env (OPENAI_API_KEY, etc.) so it does not have
+                          # to be exported by hand in every terminal session

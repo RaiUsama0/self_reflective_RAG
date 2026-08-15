@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+data/raw/
+data/processed/
+data/subsets/
+results/
+.ipynb_checkpoints/
+.env
+.claude/
+.vscode/

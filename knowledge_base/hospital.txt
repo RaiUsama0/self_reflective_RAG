@@ -1,0 +1,92 @@
+=====================================================
+CityCare General Hospital Knowledge Base
+=====================================================
+
+Hospital Name:
+CityCare General Hospital
+
+Location:
+Manchester, United Kingdom
+
+Founded:
+1998
+
+Hospital Capacity:
+450 beds
+
+Medical Director:
+Dr. Robert Evans
+
+Emergency Department Head:
+Dr. Olivia Brown
+
+Departments:
+- Emergency Medicine
+- Cardiology
+- Neurology
+- Pediatrics
+- Radiology
+
+MRI Department
+
+MRI Machines:
+3 Siemens Magnetom scanners
+
+Operating Hours:
+Monday-Friday
+8:00 AM - 6:00 PM
+
+Laboratory
+
+COVID PCR Results:
+Usually available within 24 hours.
+
+Blood Test Results:
+Usually available within 6 hours.
+
+CT Scan Results:
+Usually available within 12 hours.
+
+Emergency Policy
+
+Patients with life-threatening conditions must be treated immediately regardless of insurance status.
+
+Visitors
+
+Weekdays:
+2 PM - 7 PM
+
+Weekends:
+10 AM - 7 PM
+
+Parking
+
+Parking is free for emergency patients.
+
+General visitors pay £5 per day.
+
+Pharmacy
+
+Open:
+Monday-Saturday
+
+9:00 AM - 8:00 PM
+
+Closed on Sundays.
+
+Radiology
+
+Provides:
+MRI
+CT Scan
+Ultrasound
+X-Ray
+
+Hospital Cafeteria
+
+Open:
+7:00 AM - 8:00 PM
+
+=====================================================
+END
+=====================================================

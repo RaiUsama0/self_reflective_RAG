@@ -1,0 +1,2 @@
+List every organization described in the knowledge base along with its founding year, ordered from oldest to newest.
+Which facilities remain operational after 8 PM on weekdays across every knowledge base?

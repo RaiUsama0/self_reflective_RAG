@@ -1,0 +1,34 @@
+Mission:
+Mars Explorer
+
+Launch Date:
+14 August 2027
+
+Launch Site:
+Cape Canaveral
+
+Mission Duration:
+540 days
+
+Mission Director:
+Dr. Amelia Foster
+
+Power:
+Solar Panels
+
+Communication:
+Deep Space Network
+
+Objectives
+
+Collect underground soil samples.
+
+Search for microbial life.
+
+Navigation
+
+Autonomous navigation system.
+
+Landing Site
+
+Jezero Crater.
