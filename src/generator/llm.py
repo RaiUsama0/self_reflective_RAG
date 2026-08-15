@@ -1,7 +1,5 @@
 """LLM backends behind one interface, plus prompt templates and JSON recovery.
 
-  MockLLM         - scripted and deterministic. Makes the pipeline testable with no
-                    GPU and no downloads; used by the tests and by `main.py demo`.
   HFLocalLLM      - local HuggingFace causal LM (departmental GPU or Colab).
   OpenAICompatLLM - any OpenAI-compatible endpoint, including a local vLLM or Ollama
                     server. Useful when GPU memory will not hold a 7B model.
@@ -12,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 from ..utils.schema import RetrievedDoc
 
@@ -172,52 +170,6 @@ class BaseLLM:
         raise NotImplementedError
 
 
-class MockLLM(BaseLLM):
-    """Routes prompts to handlers by substring match; first match wins."""
-
-    def __init__(self, handlers: list[tuple[str, Callable[[str], str]]] | None = None,
-                 default: str = "") -> None:
-        super().__init__()
-        self.handlers = handlers or []
-        self.default = default
-        self.prompts: list[str] = []
-
-    def register(self, trigger: str, handler: Callable[[str], str]) -> "MockLLM":
-        self.handlers.append((trigger, handler))
-        return self
-
-    def _complete(self, prompt: str, system: str | None,
-                  max_tokens: int, temperature: float) -> str:
-        self.prompts.append(prompt)
-        for trigger, handler in self.handlers:
-            if trigger in prompt:
-                return handler(prompt)
-        return self.default
-
-
-class ExtractiveMockLLM(MockLLM):
-    """Answers by quoting the highest-ranked passage.
-
-    Not a language model - it exists so the retrieval and pipeline plumbing can be
-    exercised end to end offline. Any answer-quality number it produces is
-    meaningless and must never be reported.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    def _complete(self, prompt: str, system: str | None,
-                  max_tokens: int, temperature: float) -> str:
-        self.n_calls = self.n_calls
-        block = prompt.split("Question:")[0]
-        matches = re.findall(r"\[([A-Za-z0-9_\-]+)\]\s*(?:[^\n]*)\n([^\n]+)", block)
-        if not matches:
-            return INSUFFICIENT
-        doc_id, text = matches[0]
-        sentence = re.split(r"(?<=[.!?])\s+", text.strip())[0]
-        return f"{sentence} [{doc_id}]"
-
-
 class HFLocalLLM(BaseLLM):
     """Local HuggingFace causal LM. Greedy by default so runs are reproducible."""
 
@@ -290,11 +242,7 @@ class OpenAICompatLLM(BaseLLM):
 
 
 def build_llm(spec: str, **kwargs: Any) -> BaseLLM:
-    """`mock` | `extractive` | `hf:<model_id>` | `openai:<model>`."""
-    if spec == "mock":
-        return MockLLM(**kwargs)
-    if spec == "extractive":
-        return ExtractiveMockLLM()
+    """`hf:<model_id>` | `openai:<model>`."""
     if spec.startswith("hf:"):
         return HFLocalLLM(spec[3:], **kwargs)
     if spec.startswith("openai:"):

@@ -218,11 +218,6 @@ def cmd_ask(args: argparse.Namespace) -> int:
     if args.file:
         from src.data.ingest import build_or_load_dir_index, build_or_load_file_index
 
-        if args.llm == "extractive":
-            raise SystemExit(
-                "--file needs a real --llm, e.g. --llm openai:<model> or "
-                "--llm hf:<model_id> - extractive does not produce meaningful "
-                "verification results")
         if Path(args.file).is_dir():
             retriever = build_or_load_dir_index(
                 args.file, chunk_words=args.chunk_words, embedder_name=args.embedder,
@@ -289,8 +284,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="frozen subset to retrieve over; --file or --subset is required")
     p.add_argument("--index", default=None, help="prebuilt index for that subset")
     p.add_argument("--embedder", default=DEFAULT_EMBEDDER)
-    p.add_argument("--llm", default="extractive",
-                   help="extractive | hf:<model_id> | openai:<model>")
+    p.add_argument("--llm", default="openai:gpt-4o-mini",
+                   help="hf:<model_id> | openai:<model>")
     p.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     p.add_argument("--max-iterations", type=int, default=3)
     p.add_argument("--min-support-ratio", type=float, default=1.0)
@@ -353,8 +348,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--subset", required=True)
     p.add_argument("--index", default=None, help="prebuilt index; otherwise built now")
     p.add_argument("--embedder", default=DEFAULT_EMBEDDER)
-    p.add_argument("--llm", default="extractive",
-                   help="mock | extractive | hf:<model_id> | openai:<model>")
+    p.add_argument("--llm", default="openai:gpt-4o-mini",
+                   help="hf:<model_id> | openai:<model>")
     p.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     p.add_argument("--max-new-tokens", type=int, default=320)
     p.add_argument("--backend", default="auto", choices=["auto", "faiss", "numpy"])

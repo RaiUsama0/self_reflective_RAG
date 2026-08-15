@@ -1,4 +1,5 @@
-"""Offline tests: no GPU, no network, no model downloads.
+"""Most tests are offline; TestGenerator.test_call_counting calls the real
+OpenAI API and needs OPENAI_API_KEY set.
 
     python tests/test_pipeline.py
 """
@@ -6,14 +7,18 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Callable
+
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+load_dotenv(ROOT / ".env")
 
 from src.data.ingest import chunk_text, load_file_as_documents
 from src.data.preprocess import clean_fever_text, make_doc_id, normalise_ws
 from src.embeddings.embedder import TfidfEmbedder, l2_normalize
-from src.generator.llm import build_llm, extract_json, format_evidence
+from src.generator.llm import BaseLLM, build_llm, extract_json, format_evidence
 from src.pipeline.baseline import (
     aggregate, answer_in_prediction, exact_match, precision_at_k,
     recall_at_k, token_f1,
@@ -22,6 +27,31 @@ from src.retrieval.faiss_index import VectorIndex
 from src.utils.schema import Question, RetrievedDoc
 
 import numpy as np
+
+
+class ScriptedLLM(BaseLLM):
+    """Test-only stub: routes prompts to handlers by substring match.
+
+    Used solely to force the exact malformed/adversarial LLM responses that the
+    Verifier's defensive parsing is meant to handle (missing doc_ids, citations to
+    passages that were never retrieved, missing verdicts, unparseable output) - a
+    real model call cannot be made to reliably reproduce those on demand.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.handlers: list[tuple[str, Callable[[str], str]]] = []
+
+    def register(self, trigger: str, handler: Callable[[str], str]) -> "ScriptedLLM":
+        self.handlers.append((trigger, handler))
+        return self
+
+    def _complete(self, prompt: str, system: str | None,
+                  max_tokens: int, temperature: float) -> str:
+        for trigger, handler in self.handlers:
+            if trigger in prompt:
+                return handler(prompt)
+        return ""
 
 
 class TestPreprocess(unittest.TestCase):
@@ -104,8 +134,9 @@ class TestGenerator(unittest.TestCase):
         self.assertEqual(extract_json("nothing", default={}), {})
 
     def test_call_counting(self):
-        llm = build_llm("mock")
-        llm.complete("x"); llm.complete("y")
+        llm = build_llm("openai:gpt-4o-mini")
+        llm.complete("Reply with the single word: ack")
+        llm.complete("Reply with the single word: ack")
         self.assertEqual(llm.n_calls, 2)
 
 
@@ -134,7 +165,7 @@ from src.pipeline.verifier import Verifier, split_sentences
 
 class TestVerifier(unittest.TestCase):
     def test_supported_without_evidence_ids_is_downgraded(self):
-        llm = build_llm("mock")
+        llm = ScriptedLLM()
         llm.register("Split the following", lambda p: '{"claims":["c1"]}')
         llm.register("Claims to verify",
                      lambda p: '{"verdicts":[{"claim":"c1","verdict":"supported","doc_ids":[]}]}')
@@ -142,7 +173,7 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(rep.claims[0].verdict, "partial")
 
     def test_citation_to_absent_passage_is_rejected(self):
-        llm = build_llm("mock")
+        llm = ScriptedLLM()
         llm.register("Split the following", lambda p: '{"claims":["c1"]}')
         llm.register("Claims to verify",
                      lambda p: '{"verdicts":[{"claim":"c1","verdict":"supported","doc_ids":["ghost"]}]}')
@@ -151,7 +182,7 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(rep.claims[0].verdict, "partial")
 
     def test_missing_verdict_defaults_to_unsupported(self):
-        llm = build_llm("mock")
+        llm = ScriptedLLM()
         llm.register("Split the following", lambda p: '{"claims":["c1","c2"]}')
         llm.register("Claims to verify",
                      lambda p: '{"verdicts":[{"claim":"c1","verdict":"supported","doc_ids":["d1"]}]}')
@@ -159,8 +190,8 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(rep.claims[1].verdict, "unsupported")
 
     def test_unparseable_output_falls_back_to_sentences(self):
-        rep = Verifier(build_llm("mock")).run("First sentence. Second sentence.",
-                                              [RetrievedDoc("d1", "t", 1.0)])
+        rep = Verifier(ScriptedLLM()).run("First sentence. Second sentence.",
+                                          [RetrievedDoc("d1", "t", 1.0)])
         self.assertEqual(rep.n_claims, 2)
         self.assertEqual(rep.support_ratio, 0.0)
 
