@@ -16,14 +16,14 @@ pip install -r requirements.txt
 python main.py check               # versions, GPU, FAISS
 ```
 
-`numpy` and `scikit-learn` alone are enough for the tests —
-everything heavier is imported lazily, so the project runs without torch or FAISS
-installed.
+`torch` and FAISS are imported lazily and never required — `numpy`/`scikit-learn`
+cover retrieval and embedding fallbacks. The `openai` package and network access are
+required, though: the test suite makes one real call to the OpenAI API.
 
 ## Verify it works
 
 ```bash
-python tests/test_pipeline.py      # unit tests, no network, no downloads
+python tests/test_pipeline.py      # needs OPENAI_API_KEY and network for one test
 ```
 
 ## Talk to it
@@ -53,9 +53,7 @@ python main.py ask --file notes.txt --llm openai:gpt-4o-mini \
                    --question "What was the budget?"
 ```
 
-`--file` requires a real `--llm` (`openai:<model>` or `hf:<model_id>`) - the
-extractive mock does not produce usable claims through the verifier, so its numbers
-would be meaningless here.
+`--llm` takes `openai:<model>` or `hf:<model_id>` (default `openai:gpt-4o-mini`).
 
 The index is built once and cached next to `data/subsets/file_<name>/`, keyed on the
 file's checksum - asking a second question re-embeds nothing, and editing the file
@@ -149,7 +147,7 @@ src/data/subset.py           frozen subsets, checksums
 src/embeddings/embedder.py   sentence-transformers and TF-IDF backends
 src/retrieval/faiss_index.py flat / IVF / HNSW, exact numpy fallback
 src/retrieval/retriever.py   dense retrieval, batching, persistence
-src/generator/llm.py         mock / HuggingFace / OpenAI-compatible; prompts
+src/generator/llm.py         HuggingFace / OpenAI-compatible backends; prompts
 src/pipeline/baseline.py     single-pass RAG + evaluation metrics
 src/pipeline/verifier.py     claim decomposition + claim-level verification
 src/pipeline/refine.py       query reformulation from unsupported claims
