@@ -159,23 +159,3 @@ src/utils/                   logging, seeding, IO, checksums, schema, env check
 main.py                      CLI entry point for every stage
 ```
 
-## Implementation notes worth defending in the viva
-
-**Citations are validated, not trusted.** A citation naming a passage that is not in
-context is dropped. Otherwise a model can inflate its own attribution score by
-inventing identifiers.
-
-**Retrieval and generation are separately scored.** `all_gold_retrieved` isolates
-retrieval failure from generation failure, so a poor F1 can be attributed to the
-right stage.
-
-**Approximate indexes are optional, not default.** `flat` is exact. IVF and HNSW are
-available for scale, but they can miss gold passages, which shows up as reduced
-retrieval recall — a difference that must be reported, not absorbed.
-
-**LangChain is installed but not used.** It is listed in the approved project plan,
-so it stays in `requirements.txt` and `main.py check` reports it. The pipeline calls
-models directly because the verification loop needs explicit per-iteration tracing,
-and those traces are the experimental data. State this in the methodology rather
-than letting the discrepancy between plan and code go unexplained.
-
