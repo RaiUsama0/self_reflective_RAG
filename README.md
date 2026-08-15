@@ -4,8 +4,8 @@ MSc dissertation project — Rai Usama, Keele University (CSC-44120).
 Supervisor: Marco Ortolani.
 
 **Current status:** environment, data pipeline, single-pass baseline and the
-verification loop are implemented. Still to do: the full experimental comparison over
-HotpotQA and FEVER, the N-iteration ablation, and human validation of the verifier.
+verification loop, the N-iteration ablation, and human validation of the verifier are
+implemented. Still to do: the full experimental comparison over HotpotQA and FEVER.
 
 ## Install
 
@@ -179,9 +179,3 @@ models directly because the verification loop needs explicit per-iteration traci
 and those traces are the experimental data. State this in the methodology rather
 than letting the discrepancy between plan and code go unexplained.
 
-## Next
-
-The verification loop: claim decomposition, claim-level entailment against the
-retrieved passages, query reformulation from unsupported claims, and the capped
-refinement loop — plus attribution and hallucination metrics, and the
-N-iteration ablation.
