@@ -250,14 +250,30 @@ def cmd_ask(args: argparse.Namespace) -> int:
               if line.strip()]
         if not qs:
             raise SystemExit(f"{args.questions_file} has no questions (one per line)")
-        batch_table_ask(qs, baseline, proposed)
+        rows = batch_table_ask(qs, baseline, proposed)
     elif args.question:
-        print_table_report(args.question, baseline, proposed)
+        rows = [print_table_report(args.question, baseline, proposed)]
     else:
         intro = (f"File loaded: {args.file} ({len(documents)} passages). "
                  "What would you like to ask about it? (or 'quit' to exit)"
                  if args.file else None)
-        repl_table(baseline, proposed, intro=intro)
+        rows = repl_table(baseline, proposed, intro=intro)
+
+    if args.save_results and rows:
+        from src.utils.io import write_json
+
+        per_question = [{
+            "qid": str(i), "question": r["question"], "task": "qa",
+            "gold_answer": None, "gold_doc_ids": [],
+            "self_reflective": {"confidence": r["confidence"],
+                                "hallucination": r["hallucination"]},
+            "iterations": r["loop_iterations"],
+        } for i, r in enumerate(rows, 1)]
+        write_json(args.save_results, {
+            "meta": {"src_file": args.file or args.subset, "dataset": "custom"},
+            "topk_sweep": [], "per_question": per_question,
+        })
+        log.info("wrote %s (%d questions, ablation-ready)", args.save_results, len(rows))
     return 0
 
 
@@ -285,6 +301,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="--file only: target passage size in words")
     p.add_argument("--force-reindex", action="store_true",
                    help="--file only: rebuild the cached index even if unchanged")
+    p.add_argument("--save-results", default=None,
+                   help="write each question's self-reflective iteration history to "
+                        "this path, in the shape scripts/ablation_n_iterations.py "
+                        "reads; no gold answers are available here so only "
+                        "confidence/hallucination are ablatable, not em/f1/accuracy")
     p.add_argument("--subset", default=None,
                    help="frozen subset to retrieve over; --file or --subset is required")
     p.add_argument("--index", default=None, help="prebuilt index for that subset")

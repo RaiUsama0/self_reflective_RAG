@@ -77,7 +77,8 @@ def print_table_report(question: str, baseline: BaselineRAG, proposed: SelfRefle
             "hallucination": report.hallucination_rate,
             "iterations": float(result.n_iterations),
             "self_calls": float(result.llm_calls),
-            "baseline_calls": float(b.llm_calls)}
+            "baseline_calls": float(b.llm_calls),
+            "loop_iterations": [it.to_dict() for it in result.iterations]}
 
 
 def _print_summary_table(rows: list[dict[str, float]]) -> None:
@@ -114,7 +115,7 @@ def batch_table_ask(questions: list[str], baseline: BaselineRAG,
 
 
 def repl_table(baseline: BaselineRAG, proposed: SelfReflectiveRAG,
-              intro: str | None = None) -> None:
+              intro: str | None = None) -> list[dict[str, float]]:
     """Live question loop: one detail table per question typed. Prints the summary
     table on exit if more than one question was asked."""
     if intro:
@@ -139,3 +140,4 @@ def repl_table(baseline: BaselineRAG, proposed: SelfReflectiveRAG,
         except Exception as exc:
             print(f"error: {type(exc).__name__}: {exc}")
     _print_summary_table(rows)
+    return rows

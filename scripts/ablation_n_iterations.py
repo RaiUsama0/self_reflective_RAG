@@ -57,26 +57,31 @@ def _score(best_it: dict, question: dict) -> dict[str, float]:
     answer = best_it["answer"]
     retrieved_ids = best_it["retrieved_ids"]
     citations = best_it.get("citations", [])
-    gold_answer = question["gold_answer"]
+    gold_answer = question.get("gold_answer")
     gold_ids = question.get("gold_doc_ids", [])
     task = question.get("task", "qa")
     report = _report_from_dict(best_it.get("report"))
 
     metrics = {
-        "retrieval_recall": recall_at_k(retrieved_ids, gold_ids),
-        "retrieval_precision": precision_at_k(retrieved_ids, gold_ids),
         "n_citations": float(len(citations)),
         "abstained": float(answer.upper().startswith(INSUFFICIENT)),
         "confidence": report.support_ratio,
         "hallucination": report.hallucination_rate,
         "llm_calls_so_far": float(best_it.get("llm_calls_so_far", 0)),
     }
-    if task == "fact_verification":
-        metrics["verdict_accuracy"] = verdict_accuracy(answer, gold_answer)
-    else:
-        metrics["em"] = exact_match(answer, gold_answer)
-        metrics["f1"] = token_f1(answer, gold_answer)
-        metrics["answer_recall"] = answer_in_prediction(answer, gold_answer)
+    # gold_doc_ids/gold_answer are only available for frozen dataset subsets
+    # (run_subset_experiment.py) - main.py ask has neither, since it takes ad hoc
+    # questions with no ground truth, so it can only ablate confidence/hallucination.
+    if gold_ids:
+        metrics["retrieval_recall"] = recall_at_k(retrieved_ids, gold_ids)
+        metrics["retrieval_precision"] = precision_at_k(retrieved_ids, gold_ids)
+    if gold_answer:
+        if task == "fact_verification":
+            metrics["verdict_accuracy"] = verdict_accuracy(answer, gold_answer)
+        else:
+            metrics["em"] = exact_match(answer, gold_answer)
+            metrics["f1"] = token_f1(answer, gold_answer)
+            metrics["answer_recall"] = answer_in_prediction(answer, gold_answer)
     return metrics
 
 
@@ -113,11 +118,14 @@ def main() -> int:
         summary = aggregate(rows)
         summary["n"] = n
         sweep.append(summary)
-        metric_key = "verdict_accuracy" if "verdict_accuracy" in summary else "f1"
-        print(f"N={n:<3} mean_llm_calls={summary['llm_calls_so_far']:.2f}  "
-              f"confidence={summary['confidence']:.3f}  "
-              f"hallucination={summary['hallucination']:.3f}  "
-              f"{metric_key}={summary.get(metric_key, float('nan')):.3f}")
+        metric_key = ("verdict_accuracy" if "verdict_accuracy" in summary
+                     else "f1" if "f1" in summary else None)
+        line = (f"N={n:<3} mean_llm_calls={summary['llm_calls_so_far']:.2f}  "
+               f"confidence={summary['confidence']:.3f}  "
+               f"hallucination={summary['hallucination']:.3f}")
+        if metric_key:
+            line += f"  {metric_key}={summary[metric_key]:.3f}"
+        print(line)
 
     out_path = Path(args.results).parent / "ablation_n_iterations.json"
     write_json(out_path, {
