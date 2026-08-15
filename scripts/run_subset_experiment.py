@@ -15,9 +15,13 @@ Usage
                             --index data/subsets/fever_n20_seed13/index_all_MiniLM_L6_v2
 """
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
+
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "4")
 
 from dotenv import load_dotenv
 
