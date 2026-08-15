@@ -103,12 +103,14 @@ def main() -> int:
         p_report = p.final_report
 
         per_question.append({
-            "qid": q.qid, "question": q.question,
+            "qid": q.qid, "question": q.question, "task": task,
+            "gold_answer": q.answer, "gold_doc_ids": q.gold_doc_ids,
             "baseline": {**b_row, "confidence": b_verify.support_ratio,
                         "hallucination": b_verify.hallucination_rate, "seconds": b_seconds},
             "self_reflective": {**p_row, "confidence": p_report.support_ratio if p_report else 0.0,
                                 "hallucination": p_report.hallucination_rate if p_report else 1.0,
                                 "seconds": p_seconds},
+            "iterations": [it.to_dict() for it in p.iterations],
         })
         print(f"  [{i}/{len(questions)}] {q.qid}: baseline conf="
               f"{per_question[-1]['baseline']['confidence']:.2f} hall="

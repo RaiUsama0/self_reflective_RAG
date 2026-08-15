@@ -121,13 +121,16 @@ class Iteration:
     answer: str
     report: VerificationReport | None = None
     seconds: float = 0.0
+    citations: list[str] = field(default_factory=list)
+    llm_calls_so_far: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "index": self.index, "query": self.query,
             "retrieved_ids": self.retrieved_ids, "answer": self.answer,
             "report": self.report.to_dict() if self.report else None,
-            "seconds": self.seconds,
+            "seconds": self.seconds, "citations": self.citations,
+            "llm_calls_so_far": self.llm_calls_so_far,
         }
 
 

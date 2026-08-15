@@ -97,7 +97,8 @@ class SelfReflectiveRAG:
             doc_ids = [d.doc_id for d in docs]
 
             it = Iteration(i, query, doc_ids, answer, report,
-                           time.perf_counter() - it_start)
+                           time.perf_counter() - it_start, citations=citations,
+                           llm_calls_so_far=self.llm.n_calls - calls_before)
             iterations.append(it)
             if on_iteration:
                 on_iteration(it)
