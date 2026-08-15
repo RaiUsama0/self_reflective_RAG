@@ -36,6 +36,39 @@ Answer:"""
 
 INSUFFICIENT = "INSUFFICIENT EVIDENCE"
 
+FACT_VERIFICATION_SYSTEM = (
+    "You judge whether a claim is supported by the provided evidence passages. "
+    "You never rely on prior knowledge. You output your verdict first, then a short "
+    "justification that cites the passage identifiers."
+)
+
+FACT_VERIFICATION_TEMPLATE = """Evidence passages:
+{evidence}
+
+Claim: {question}
+
+Decide whether the evidence supports or refutes the claim above.
+Reply on the first line with exactly one word: SUPPORTS or REFUTES.
+On the next line, write a short justification (1-2 sentences) citing the
+supporting passage identifier(s) in square brackets, e.g. [{example_id}].
+If the evidence does not address the claim at all, reply exactly: INSUFFICIENT EVIDENCE
+
+Verdict:"""
+
+
+def extract_verdict(answer: str) -> str:
+    """First line of a FACT_VERIFICATION_TEMPLATE answer, normalised to
+    SUPPORTS/REFUTES/INSUFFICIENT EVIDENCE/UNKNOWN."""
+    first_line = answer.strip().splitlines()[0].strip().upper() if answer.strip() else ""
+    if first_line.startswith(INSUFFICIENT):
+        return INSUFFICIENT
+    if "REFUTE" in first_line:
+        return "REFUTES"
+    if "SUPPORT" in first_line:
+        return "SUPPORTS"
+    return "UNKNOWN"
+
+
 DECOMPOSE_SYSTEM = (
     "You split text into atomic factual claims. Each claim must be a single, "
     "self-contained, checkable statement. You output JSON only."

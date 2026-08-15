@@ -148,13 +148,13 @@ def main() -> int:
     per_question = []
     for q in questions:
         t0 = time.perf_counter()
-        b = baseline.run(q.question, qid=q.qid)
+        b = baseline.run(q.question, qid=q.qid, task=q.meta.get("task", "qa"))
         b_row = evaluate_one(b, q)
         b_verify = verifier.run(b.answer, b.retrieved)
         b_seconds = time.perf_counter() - t0
 
         t0 = time.perf_counter()
-        p = proposed.run(q.question, qid=q.qid)
+        p = proposed.run(q.question, qid=q.qid, task=q.meta.get("task", "qa"))
         p_row = evaluate_one(p, q)
         p_seconds = time.perf_counter() - t0
         p_report = p.final_report

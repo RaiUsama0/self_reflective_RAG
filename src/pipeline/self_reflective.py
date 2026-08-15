@@ -20,7 +20,8 @@ import time
 from typing import Sequence
 
 from ..generator.llm import (
-    GENERATOR_SYSTEM, GENERATOR_TEMPLATE, BaseLLM, format_evidence,
+    FACT_VERIFICATION_SYSTEM, FACT_VERIFICATION_TEMPLATE, GENERATOR_SYSTEM,
+    GENERATOR_TEMPLATE, BaseLLM, format_evidence,
 )
 from ..retrieval.retriever import DenseRetriever
 from ..utils.schema import Iteration, LoopResult, RetrievedDoc
@@ -50,15 +51,21 @@ class SelfReflectiveRAG:
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
 
-    def _generate(self, question: str, docs: Sequence[RetrievedDoc]) -> str:
-        prompt = GENERATOR_TEMPLATE.format(
+    def _generate(self, question: str, docs: Sequence[RetrievedDoc],
+                  task: str = "qa") -> str:
+        system, template = (
+            (FACT_VERIFICATION_SYSTEM, FACT_VERIFICATION_TEMPLATE) if task == "fact_verification"
+            else (GENERATOR_SYSTEM, GENERATOR_TEMPLATE)
+        )
+        prompt = template.format(
             evidence=format_evidence(docs), question=question,
             example_id=docs[0].doc_id if docs else "doc_id")
-        return self.llm.complete(prompt, system=GENERATOR_SYSTEM,
+        return self.llm.complete(prompt, system=system,
                                  max_tokens=self.max_new_tokens,
                                  temperature=self.temperature).strip()
 
-    def run(self, question: str, qid: str = "", on_iteration=None) -> LoopResult:
+    def run(self, question: str, qid: str = "", on_iteration=None,
+           task: str = "qa") -> LoopResult:
         """Run the loop. `on_iteration(Iteration)` is called after each round, which
         the interactive mode uses to show progress live."""
         t0 = time.perf_counter()
@@ -81,7 +88,7 @@ class SelfReflectiveRAG:
                 pool.setdefault(d.doc_id, d)
 
             docs = sorted(pool.values(), key=lambda d: -d.score)[:k]
-            answer = self._generate(question, docs)
+            answer = self._generate(question, docs, task=task)
             report = self.verifier.run(answer, docs)
 
             valid = {d.doc_id for d in docs}

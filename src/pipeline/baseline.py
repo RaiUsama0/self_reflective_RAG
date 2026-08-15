@@ -19,7 +19,8 @@ from typing import Sequence
 
 from ..config.config import RESULTS_DIR, RunConfig
 from ..generator.llm import (
-    GENERATOR_SYSTEM, GENERATOR_TEMPLATE, INSUFFICIENT, BaseLLM, format_evidence,
+    FACT_VERIFICATION_SYSTEM, FACT_VERIFICATION_TEMPLATE, GENERATOR_SYSTEM,
+    GENERATOR_TEMPLATE, INSUFFICIENT, BaseLLM, extract_verdict, format_evidence,
 )
 from ..retrieval.retriever import DenseRetriever
 from ..utils.io import write_json, write_jsonl
@@ -45,15 +46,19 @@ class BaselineRAG:
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
 
-    def run(self, question: str, qid: str = "") -> BaselineResult:
+    def run(self, question: str, qid: str = "", task: str = "qa") -> BaselineResult:
         t0 = time.perf_counter()
         calls_before = self.llm.n_calls
 
         docs = self.retriever.retrieve(question, k=self.top_k)
-        prompt = GENERATOR_TEMPLATE.format(
+        system, template = (
+            (FACT_VERIFICATION_SYSTEM, FACT_VERIFICATION_TEMPLATE) if task == "fact_verification"
+            else (GENERATOR_SYSTEM, GENERATOR_TEMPLATE)
+        )
+        prompt = template.format(
             evidence=format_evidence(docs), question=question,
             example_id=docs[0].doc_id if docs else "doc_id")
-        answer = self.llm.complete(prompt, system=GENERATOR_SYSTEM,
+        answer = self.llm.complete(prompt, system=system,
                                    max_tokens=self.max_new_tokens,
                                    temperature=self.temperature).strip()
 
@@ -100,6 +105,13 @@ def answer_in_prediction(pred: str, gold: str) -> float:
     return float(normalize_answer(gold) in normalize_answer(pred))
 
 
+def verdict_accuracy(pred: str, gold_label: str) -> float:
+    """FEVER-style classification accuracy: does the generated verdict (first line of
+    the answer) match the gold SUPPORTS/REFUTES label? EM/F1 don't apply to fact
+    verification - the gold 'answer' is a label, not a text span to match against."""
+    return float(extract_verdict(pred) == gold_label.strip().upper())
+
+
 def recall_at_k(retrieved: Sequence[str], gold: Sequence[str]) -> float:
     if not gold:
         return float("nan")
@@ -114,7 +126,7 @@ def precision_at_k(retrieved: Sequence[str], gold: Sequence[str]) -> float:
 
 def evaluate_one(result: BaselineResult, question: Question) -> dict[str, float]:
     gold_ids = question.gold_doc_ids
-    return {
+    metrics = {
         "em": exact_match(result.answer, question.answer),
         "f1": token_f1(result.answer, question.answer),
         "answer_recall": answer_in_prediction(result.answer, question.answer),
@@ -126,6 +138,9 @@ def evaluate_one(result: BaselineResult, question: Question) -> dict[str, float]
         "llm_calls": float(result.llm_calls),
         "seconds": result.seconds,
     }
+    if question.meta.get("task") == "fact_verification":
+        metrics["verdict_accuracy"] = verdict_accuracy(result.answer, question.answer)
+    return metrics
 
 
 def aggregate(rows: Sequence[dict[str, float]]) -> dict[str, float]:
@@ -149,7 +164,7 @@ def run_baseline(system: BaselineRAG, questions: Sequence[Question],
     rows, records = [], []
     t0 = time.perf_counter()
     for i, q in enumerate(questions, 1):
-        result = system.run(q.question, qid=q.qid)
+        result = system.run(q.question, qid=q.qid, task=q.meta.get("task", "qa"))
         row = evaluate_one(result, q)
         rows.append(row)
         records.append({

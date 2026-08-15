@@ -89,14 +89,15 @@ def main() -> int:
     print(f"\n--- baseline vs self-reflective at top_k={args.top_k} ({len(questions)} questions) ---")
     per_question = []
     for i, q in enumerate(questions, 1):
+        task = q.meta.get("task", "qa")
         t0 = time.perf_counter()
-        b = baseline.run(q.question, qid=q.qid)
+        b = baseline.run(q.question, qid=q.qid, task=task)
         b_row = evaluate_one(b, q)
         b_verify = verifier.run(b.answer, b.retrieved)
         b_seconds = time.perf_counter() - t0
 
         t0 = time.perf_counter()
-        p = proposed.run(q.question, qid=q.qid)
+        p = proposed.run(q.question, qid=q.qid, task=task)
         p_row = evaluate_one(p, q)
         p_seconds = time.perf_counter() - t0
         p_report = p.final_report

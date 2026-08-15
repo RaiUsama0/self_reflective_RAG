@@ -3,11 +3,15 @@ OpenAI API and needs OPENAI_API_KEY set.
 
     python tests/test_pipeline.py
 """
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Callable
+
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "4")
 
 from dotenv import load_dotenv
 
@@ -18,13 +22,15 @@ load_dotenv(ROOT / ".env")
 from src.data.ingest import chunk_text, load_file_as_documents
 from src.data.preprocess import clean_fever_text, make_doc_id, normalise_ws
 from src.embeddings.embedder import TfidfEmbedder, l2_normalize
-from src.generator.llm import BaseLLM, build_llm, extract_json, format_evidence
+from src.generator.llm import (
+    BaseLLM, build_llm, extract_json, extract_verdict, format_evidence,
+)
 from src.pipeline.baseline import (
-    aggregate, answer_in_prediction, exact_match, precision_at_k,
+    aggregate, answer_in_prediction, evaluate_one, exact_match, precision_at_k,
     recall_at_k, token_f1,
 )
 from src.retrieval.faiss_index import VectorIndex
-from src.utils.schema import Question, RetrievedDoc
+from src.utils.schema import BaselineResult, Question, RetrievedDoc
 
 import numpy as np
 
@@ -138,6 +144,25 @@ class TestGenerator(unittest.TestCase):
         llm.complete("Reply with the single word: ack")
         llm.complete("Reply with the single word: ack")
         self.assertEqual(llm.n_calls, 2)
+
+    def test_extract_verdict(self):
+        self.assertEqual(extract_verdict("SUPPORTS\nFox 2000 released it [d1]."), "SUPPORTS")
+        self.assertEqual(extract_verdict("REFUTES\nSony released it, not Fox [d1]."), "REFUTES")
+        self.assertEqual(extract_verdict("INSUFFICIENT EVIDENCE"), "INSUFFICIENT EVIDENCE")
+        self.assertEqual(extract_verdict("I'm not sure about this claim."), "UNKNOWN")
+
+    def test_fact_verification_scored_by_verdict_not_em(self):
+        result = BaselineResult(qid="q1", question="claim", answer="SUPPORTS\nGrounded [d1].")
+        q = Question("q1", "claim", "SUPPORTS", meta={"task": "fact_verification"})
+        metrics = evaluate_one(result, q)
+        self.assertEqual(metrics["verdict_accuracy"], 1.0)
+        self.assertEqual(metrics["em"], 0.0)
+
+    def test_qa_question_has_no_verdict_accuracy(self):
+        result = BaselineResult(qid="q1", question="q", answer="Paris [d1].")
+        q = Question("q1", "q", "Paris")
+        metrics = evaluate_one(result, q)
+        self.assertNotIn("verdict_accuracy", metrics)
 
 
 class TestMetrics(unittest.TestCase):
