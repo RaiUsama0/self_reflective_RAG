@@ -19,30 +19,6 @@ Three arms isolate what actually causes any measured difference (see
 | `RetrievalOnlyRAG` | same retrieval-expansion schedule as self-reflective, **no verifier** | does more evidence alone help? |
 | `SelfReflectiveRAG` | retrieve → generate → verify → reformulate → retry | does verification help beyond that? |
 
-The generator and verifier are independently configurable — `GENERATOR_MODEL`/
-`VERIFIER_MODEL` env vars, or `--llm`/`--verifier-llm` flags — so the same script runs
-both **Experiment A** (same model for both roles) and **Experiment B** (an independent
-verifier model), addressing the self-verification circularity risk of using one model
-to judge its own output. Leaving `VERIFIER_MODEL`/`--verifier-llm` unset means
-same-model (Experiment A, the default); every run records which model played which
-role in `config.json` and `results.json`'s `meta` block, never silently.
-
-```bash
-# Experiment A + B + the standardized comparison table, one dataset:
-python main.py subset  --dataset fever --n 200 --seed 13
-python main.py index   --subset data/subsets/fever_n200_seed13
-python scripts/run_subset_experiment.py --subset data/subsets/fever_n200_seed13 \
-    --index data/subsets/fever_n200_seed13/index_all_MiniLM_L6_v2
-python scripts/ablation_n_iterations.py --results results/fever_n200_seed13/results.json
-python scripts/analyze_results.py --results-dir results/fever_n200_seed13
-
-# Independent-verifier comparison (Experiment A vs B) + claim-level agreement:
-python scripts/run_verifier_independence.py \
-    --subset data/subsets/fever_n200_seed13 \
-    --index data/subsets/fever_n200_seed13/index_all_MiniLM_L6_v2 \
-    --independent-verifier-llm openai:gpt-4.1-mini
-```
-
 ## Install
 
 ```bash
