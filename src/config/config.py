@@ -7,6 +7,8 @@ to that run's results so it stays reproducible.
 from __future__ import annotations
 
 import json
+import os
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,11 @@ DEFAULT_LLM = "mock"
 DEFAULT_SEED = 13
 DEFAULT_TOP_K = 5
 
+DEFAULT_GENERATOR_MODEL = os.environ.get("GENERATOR_MODEL", "openai:gpt-4o-mini")
+DEFAULT_VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "")
+DEFAULT_INDEPENDENT_VERIFIER_MODEL = os.environ.get(
+    "INDEPENDENT_VERIFIER_MODEL", "openai:gpt-4.1-mini")
+
 
 @dataclass
 class EmbeddingConfig:
@@ -43,6 +50,8 @@ class RetrievalConfig:
     nlist: int = 100
     nprobe: int = 10
     backend: str = "auto"
+    expand_k_each_iteration: int = 3
+    max_iterations: int = 3
 
 
 @dataclass
@@ -54,14 +63,42 @@ class GenerationConfig:
 
 
 @dataclass
+class ModelConfig:
+    """Records exactly which model played which role - the answer to "which model
+    was used for generation / decomposition / verification / reformulation" that
+    ISSUE 1 requires every run to make explicit. Decomposition and verification are
+    both the verifier's responsibility, so they share `verifier`; reformulation is a
+    generative task (drafting a search query, not judging evidence), so it shares
+    `generator`."""
+
+    generator: str = DEFAULT_GENERATOR_MODEL
+    verifier: str = ""
+    reformulator: str = ""
+    verifier_is_independent: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.verifier:
+            self.verifier = self.generator
+        if not self.reformulator:
+            self.reformulator = self.generator
+        self.verifier_is_independent = self.verifier != self.generator
+
+
+@dataclass
 class RunConfig:
     name: str = "baseline"
+    arm: str = "baseline"
     subset: str = ""
+    subset_checksum: str = ""
     index_dir: str = ""
     seed: int = DEFAULT_SEED
+    dataset: str = ""
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
+    models: ModelConfig = field(default_factory=ModelConfig)
+    min_support_ratio: float = 1.0
+    timestamp_utc: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -76,5 +113,6 @@ class RunConfig:
             embedding=EmbeddingConfig(**d.pop("embedding", {})),
             retrieval=RetrievalConfig(**d.pop("retrieval", {})),
             generation=GenerationConfig(**d.pop("generation", {})),
+            models=ModelConfig(**d.pop("models", {})),
             **d,
         )

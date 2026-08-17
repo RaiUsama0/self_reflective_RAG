@@ -28,7 +28,7 @@ class QueryReformulator:
                 unsupported="\n".join(f"- {c}" for c in unsupported),
                 seen_titles=titles, n=self.n_queries),
             system=REFORMULATE_SYSTEM, max_tokens=self.max_new_tokens,
-            temperature=self.temperature)
+            temperature=self.temperature, purpose="reformulate")
         data = extract_json(raw, default=None)
         queries: list[str] = []
         if isinstance(data, dict):

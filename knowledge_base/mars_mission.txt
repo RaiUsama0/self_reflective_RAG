@@ -1,34 +1,27 @@
-Mission:
-Mars Explorer
+Ares Horizon Mars Mission
 
-Launch Date:
-14 August 2027
+The Ares Horizon mission is an uncrewed Mars exploration mission led by the
+Interplanetary Research Consortium. The spacecraft launched on 14 March 2031 from
+Cape Canaveral.
 
-Launch Site:
-Cape Canaveral
+The mission's primary objective is to search for evidence of past microbial life in
+the Jezero Crater region.
 
-Mission Duration:
-540 days
+The rover, named Odyssey Rover, weighs approximately 1,050 kilograms and is powered
+by a radioisotope thermoelectric generator, giving it an operational lifespan of at
+least 14 years.
 
-Mission Director:
-Dr. Amelia Foster
+The journey from Earth to Mars took approximately 7 months, with the rover landing
+on 22 October 2031.
 
-Power:
-Solar Panels
+Odyssey Rover carries seven scientific instruments, including a ground-penetrating
+radar and a mass spectrometer.
 
-Communication:
-Deep Space Network
+The mission's total budget was approximately 2.7 billion dollars.
 
-Objectives
+Mission Director Dr. Elena Vasquez leads the science team of over 200 researchers
+from 15 countries.
 
-Collect underground soil samples.
-
-Search for microbial life.
-
-Navigation
-
-Autonomous navigation system.
-
-Landing Site
-
-Jezero Crater.
+The rover can travel at a maximum speed of 0.12 kilometers per hour and communicates
+with Earth via the Mars Relay Satellite Network, with a signal delay of between
+4 and 24 minutes depending on planetary alignment.

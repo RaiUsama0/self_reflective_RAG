@@ -12,7 +12,10 @@ import json
 import re
 from typing import Any, Sequence
 
+from ..utils.logging_utils import get_logger
 from ..utils.schema import RetrievedDoc
+
+log = get_logger()
 
 PROMPT_VERSION = "v1"
 
@@ -187,20 +190,95 @@ def format_evidence(docs: Sequence[RetrievedDoc], max_chars: int = 700) -> str:
     return "\n\n".join(blocks)
 
 
+_CITE = re.compile(r"\[([^\]]+)\]")
+
+
+def extract_citations(answer: str, valid_ids: Sequence[str] | set[str]) -> list[str]:
+    """Pull `[doc_id]` citations out of generated text, de-duplicated and filtered to
+    ids that were actually retrieved - a model cannot legitimately cite a passage it
+    was never shown."""
+    valid = set(valid_ids)
+    cited = [c.strip() for m in _CITE.findall(answer) for c in m.split(",")]
+    return [c for c in dict.fromkeys(cited) if c in valid]
+
+
+def count_citation_attempts(answer: str) -> int:
+    """Every distinct `[...]` token in generated text, valid or not - the denominator
+    for citation validity (what fraction of attempted citations actually pointed at a
+    retrieved passage, vs. `extract_citations`'s numerator of only the valid ones)."""
+    cited = [c.strip() for m in _CITE.findall(answer) for c in m.split(",")]
+    return len(dict.fromkeys(cited))
+
+
+APPROX_PRICING_USD_PER_1M: dict[str, tuple[float, float]] = {
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1": (2.00, 8.00),
+    "gpt-3.5-turbo": (0.50, 1.50),
+}
+
+
+def _lookup_pricing(model_name: str) -> tuple[float, float] | None:
+    for key, price in APPROX_PRICING_USD_PER_1M.items():
+        if key in model_name:
+            return price
+    return None
+
+
 class BaseLLM:
-    """Text in, text out."""
+    """Text in, text out. Every call is tagged with a `purpose` (generation /
+    decompose / verify / reformulate / ...) so cost and call counts can be reported
+    per pipeline stage even when the same model instance plays more than one role."""
+
+    name: str = "unknown"
 
     def __init__(self) -> None:
         self.n_calls = 0
+        self.calls_by_purpose: dict[str, int] = {}
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.tokens_by_purpose: dict[str, dict[str, int]] = {}
 
     def complete(self, prompt: str, system: str | None = None,
-                 max_tokens: int = 512, temperature: float = 0.0) -> str:
+                 max_tokens: int = 512, temperature: float = 0.0,
+                 purpose: str = "unspecified") -> str:
         self.n_calls += 1
-        return self._complete(prompt, system, max_tokens, temperature)
+        self.calls_by_purpose[purpose] = self.calls_by_purpose.get(purpose, 0) + 1
+        text, usage = self._complete(prompt, system, max_tokens, temperature)
+        if usage:
+            pt, ct = usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+            self.prompt_tokens += pt
+            self.completion_tokens += ct
+            bucket = self.tokens_by_purpose.setdefault(
+                purpose, {"prompt_tokens": 0, "completion_tokens": 0})
+            bucket["prompt_tokens"] += pt
+            bucket["completion_tokens"] += ct
+        return text
 
-    def _complete(self, prompt: str, system: str | None,
-                  max_tokens: int, temperature: float) -> str:
+    def _complete(self, prompt: str, system: str | None, max_tokens: int,
+                  temperature: float) -> tuple[str, dict[str, int] | None]:
         raise NotImplementedError
+
+    def estimated_cost_usd(self) -> float | None:
+        """Approximate total spend from tracked token counts, or None if this model
+        isn't in the (necessarily incomplete) pricing table."""
+        price = _lookup_pricing(self.name)
+        if price is None:
+            return None
+        in_price, out_price = price
+        return (self.prompt_tokens * in_price + self.completion_tokens * out_price) / 1e6
+
+    def usage_report(self) -> dict[str, Any]:
+        """Everything needed to attribute cost/calls to this model in a results table."""
+        return {
+            "model": self.name,
+            "n_calls": self.n_calls,
+            "calls_by_purpose": dict(self.calls_by_purpose),
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "estimated_cost_usd": self.estimated_cost_usd(),
+        }
 
 
 class HFLocalLLM(BaseLLM):
@@ -225,12 +303,13 @@ class HFLocalLLM(BaseLLM):
             kwargs["torch_dtype"] = dtype
 
         self.model_id = model_id
+        self.name = f"hf:{model_id}"
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
         self.model.eval()
 
-    def _complete(self, prompt: str, system: str | None,
-                  max_tokens: int, temperature: float) -> str:
+    def _complete(self, prompt: str, system: str | None, max_tokens: int,
+                  temperature: float) -> tuple[str, dict[str, int] | None]:
         import torch
 
         messages = ([{"role": "system", "content": system}] if system else []) + [
@@ -238,21 +317,33 @@ class HFLocalLLM(BaseLLM):
         text = self.tokenizer.apply_chat_template(messages, tokenize=False,
                                                   add_generation_prompt=True)
         inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        n_prompt_tokens = int(inputs["input_ids"].shape[1])
         with torch.no_grad():
             out = self.model.generate(
                 **inputs, max_new_tokens=max_tokens,
                 do_sample=temperature > 0,
                 temperature=temperature if temperature > 0 else None,
                 pad_token_id=self.tokenizer.eos_token_id)
-        return self.tokenizer.decode(out[0][inputs["input_ids"].shape[1]:],
-                                     skip_special_tokens=True).strip()
+        new_tokens = out[0][inputs["input_ids"].shape[1]:]
+        decoded = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        usage = {"prompt_tokens": n_prompt_tokens, "completion_tokens": int(new_tokens.shape[0])}
+        return decoded, usage
 
 
 class OpenAICompatLLM(BaseLLM):
-    """Any OpenAI-compatible /chat/completions endpoint."""
+    """Any OpenAI-compatible /chat/completions endpoint.
+
+    Retries transient failures (timeouts, connection errors, rate limits, 5xx) with
+    exponential backoff - a multi-hour unattended run over hundreds of questions will
+    hit at least one network blip, and without this a single one kills the whole run
+    with nothing saved (run_experiment() only writes results at the end). Non-
+    transient errors (bad request, auth) are not retried - they will not resolve by
+    waiting and should fail fast and loud.
+    """
 
     def __init__(self, model: str, base_url: str = "https://api.openai.com/v1",
-                 api_key_env: str = "OPENAI_API_KEY") -> None:
+                 api_key_env: str = "OPENAI_API_KEY", max_retries: int = 5,
+                 backoff_base_seconds: float = 2.0) -> None:
         super().__init__()
         import os
 
@@ -262,16 +353,42 @@ class OpenAICompatLLM(BaseLLM):
             raise ImportError("pip install openai") from exc
 
         self.model = model
+        self.name = model
+        self.max_retries = max_retries
+        self.backoff_base_seconds = backoff_base_seconds
         self.client = OpenAI(base_url=base_url, api_key=os.environ.get(api_key_env, "EMPTY"))
 
-    def _complete(self, prompt: str, system: str | None,
-                  max_tokens: int, temperature: float) -> str:
+    def _complete(self, prompt: str, system: str | None, max_tokens: int,
+                  temperature: float) -> tuple[str, dict[str, int] | None]:
+        import time as _time
+
+        import openai
+
         messages = ([{"role": "system", "content": system}] if system else []) + [
             {"role": "user", "content": prompt}]
-        resp = self.client.chat.completions.create(
-            model=self.model, messages=messages,
-            max_tokens=max_tokens, temperature=temperature)
-        return (resp.choices[0].message.content or "").strip()
+        retryable = (openai.APITimeoutError, openai.APIConnectionError,
+                    openai.RateLimitError, openai.InternalServerError)
+        last_exc: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model, messages=messages,
+                    max_tokens=max_tokens, temperature=temperature)
+                text = (resp.choices[0].message.content or "").strip()
+                usage = None
+                if getattr(resp, "usage", None) is not None:
+                    usage = {"prompt_tokens": resp.usage.prompt_tokens or 0,
+                             "completion_tokens": resp.usage.completion_tokens or 0}
+                return text, usage
+            except retryable as exc:
+                last_exc = exc
+                if attempt == self.max_retries:
+                    break
+                wait = self.backoff_base_seconds * (2 ** attempt)
+                log.warning("OpenAI call failed (%s: %s), retry %d/%d in %.0fs",
+                           type(exc).__name__, exc, attempt + 1, self.max_retries, wait)
+                _time.sleep(wait)
+        raise last_exc
 
 
 def build_llm(spec: str, **kwargs: Any) -> BaseLLM:

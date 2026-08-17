@@ -20,7 +20,8 @@ from typing import Sequence
 from ..config.config import RESULTS_DIR, RunConfig
 from ..generator.llm import (
     FACT_VERIFICATION_SYSTEM, FACT_VERIFICATION_TEMPLATE, GENERATOR_SYSTEM,
-    GENERATOR_TEMPLATE, INSUFFICIENT, BaseLLM, extract_verdict, format_evidence,
+    GENERATOR_TEMPLATE, INSUFFICIENT, BaseLLM, count_citation_attempts,
+    extract_citations, extract_verdict, format_evidence,
 )
 from ..retrieval.retriever import DenseRetriever
 from ..utils.io import write_json, write_jsonl
@@ -29,7 +30,6 @@ from ..utils.schema import BaselineResult, Question
 
 log = get_logger()
 
-_CITE = re.compile(r"\[([^\]]+)\]")
 _ARTICLES = re.compile(r"\b(a|an|the)\b")
 
 
@@ -47,8 +47,11 @@ class BaselineRAG:
         self.temperature = temperature
 
     def run(self, question: str, qid: str = "", task: str = "qa") -> BaselineResult:
+        """Takes only the question text - no gold answer, gold doc ids, or other
+        ground truth is ever in scope here, structurally, not just by convention."""
         t0 = time.perf_counter()
         calls_before = self.llm.n_calls
+        purposes_before = dict(self.llm.calls_by_purpose)
 
         docs = self.retriever.retrieve(question, k=self.top_k)
         system, template = (
@@ -60,16 +63,21 @@ class BaselineRAG:
             example_id=docs[0].doc_id if docs else "doc_id")
         answer = self.llm.complete(prompt, system=system,
                                    max_tokens=self.max_new_tokens,
-                                   temperature=self.temperature).strip()
+                                   temperature=self.temperature,
+                                   purpose="generation").strip()
 
-        valid = {d.doc_id for d in docs}
-        cited = [c.strip() for m in _CITE.findall(answer) for c in m.split(",")]
-        citations = [c for c in dict.fromkeys(cited) if c in valid]
+        citations = extract_citations(answer, {d.doc_id for d in docs})
+        calls_by_purpose = {
+            k: self.llm.calls_by_purpose.get(k, 0) - purposes_before.get(k, 0)
+            for k in self.llm.calls_by_purpose
+        }
+        calls_by_purpose = {k: v for k, v in calls_by_purpose.items() if v}
 
         return BaselineResult(
             qid=qid, question=question, answer=answer, retrieved=docs,
             citations=citations, seconds=time.perf_counter() - t0,
             llm_calls=self.llm.n_calls - calls_before,
+            calls_by_purpose=calls_by_purpose, generator_model=self.llm.name,
         )
 
 
@@ -126,6 +134,7 @@ def precision_at_k(retrieved: Sequence[str], gold: Sequence[str]) -> float:
 
 def evaluate_one(result: BaselineResult, question: Question) -> dict[str, float]:
     gold_ids = question.gold_doc_ids
+    n_attempted = count_citation_attempts(result.answer)
     metrics = {
         "em": exact_match(result.answer, question.answer),
         "f1": token_f1(result.answer, question.answer),
@@ -134,6 +143,8 @@ def evaluate_one(result: BaselineResult, question: Question) -> dict[str, float]
         "retrieval_precision": precision_at_k(result.retrieved_ids, gold_ids),
         "all_gold_retrieved": float(set(gold_ids) <= set(result.retrieved_ids)) if gold_ids else float("nan"),
         "n_citations": float(len(result.citations)),
+        "n_citation_attempts": float(n_attempted),
+        "citation_validity": (len(result.citations) / n_attempted) if n_attempted else float("nan"),
         "abstained": float(result.answer.upper().startswith(INSUFFICIENT)),
         "llm_calls": float(result.llm_calls),
         "seconds": result.seconds,

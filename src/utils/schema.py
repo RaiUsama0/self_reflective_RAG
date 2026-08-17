@@ -48,6 +48,8 @@ class BaselineResult:
     citations: list[str] = field(default_factory=list)
     seconds: float = 0.0
     llm_calls: int = 0
+    calls_by_purpose: dict[str, int] = field(default_factory=dict)
+    generator_model: str = ""
 
     @property
     def retrieved_ids(self) -> list[str]:
@@ -123,6 +125,7 @@ class Iteration:
     seconds: float = 0.0
     citations: list[str] = field(default_factory=list)
     llm_calls_so_far: int = 0
+    calls_by_purpose_so_far: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -131,11 +134,17 @@ class Iteration:
             "report": self.report.to_dict() if self.report else None,
             "seconds": self.seconds, "citations": self.citations,
             "llm_calls_so_far": self.llm_calls_so_far,
+            "calls_by_purpose_so_far": self.calls_by_purpose_so_far,
         }
 
 
 @dataclass
 class LoopResult:
+    """Result of a multi-round arm. Used by both SelfReflectiveRAG (verification-
+    driven) and RetrievalOnlyRAG (retrieval-expansion-only, no verification) - `arm`
+    and `final_report` (always None for RetrievalOnlyRAG) distinguish which produced
+    it."""
+
     qid: str
     question: str
     answer: str
@@ -145,7 +154,12 @@ class LoopResult:
     stop_reason: str = ""
     seconds: float = 0.0
     llm_calls: int = 0
+    calls_by_purpose: dict[str, int] = field(default_factory=dict)
     final_report: VerificationReport | None = None
+    arm: str = "self_reflective"
+    generator_model: str = ""
+    verifier_model: str = ""
+    retrieved: list[RetrievedDoc] = field(default_factory=list)
 
     @property
     def n_iterations(self) -> int:
@@ -157,5 +171,7 @@ class LoopResult:
             "retrieved_ids": self.retrieved_ids, "citations": self.citations,
             "iterations": [it.to_dict() for it in self.iterations],
             "stop_reason": self.stop_reason, "seconds": self.seconds,
-            "llm_calls": self.llm_calls,
+            "llm_calls": self.llm_calls, "calls_by_purpose": self.calls_by_purpose,
+            "arm": self.arm, "generator_model": self.generator_model,
+            "verifier_model": self.verifier_model,
         }

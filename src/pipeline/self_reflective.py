@@ -15,23 +15,52 @@ for evidence the corpus does not contain.
 """
 from __future__ import annotations
 
-import re
 import time
 from typing import Sequence
 
 from ..generator.llm import (
     FACT_VERIFICATION_SYSTEM, FACT_VERIFICATION_TEMPLATE, GENERATOR_SYSTEM,
-    GENERATOR_TEMPLATE, BaseLLM, format_evidence,
+    GENERATOR_TEMPLATE, BaseLLM, extract_citations, format_evidence,
 )
 from ..retrieval.retriever import DenseRetriever
 from ..utils.schema import Iteration, LoopResult, RetrievedDoc
 from .refine import QueryReformulator
 from .verifier import Verifier
 
-_CITE = re.compile(r"\[([^\]]+)\]")
+
+def _snapshot(*llms: BaseLLM) -> dict[str, int]:
+    """Per-purpose call counts summed across one or more LLM instances - used both
+    when the generator and verifier are the same object (Experiment A) and when they
+    are genuinely separate ones (Experiment B); purpose tags, not object identity,
+    are what distinguish generation/decompose/verify/reformulate calls.
+
+    De-duplicates by object identity first: when generator and verifier share one
+    instance, summing its calls_by_purpose twice would double-count every call.
+    """
+    seen: list[BaseLLM] = []
+    out: dict[str, int] = {}
+    for llm in llms:
+        if any(llm is s for s in seen):
+            continue
+        seen.append(llm)
+        for purpose, n in llm.calls_by_purpose.items():
+            out[purpose] = out.get(purpose, 0) + n
+    return out
+
+
+def _diff(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    return {k: after.get(k, 0) - before.get(k, 0) for k in after
+            if after.get(k, 0) - before.get(k, 0)}
 
 
 class SelfReflectiveRAG:
+    """Retrieve, generate, verify, refine. `llm` is the generator; `verifier` wraps
+    its own (possibly different) LLM instance, so the generator and verifier can be
+    independently configured while every other component - retriever, index, prompt,
+    seed - stays identical to the baseline. See ISSUE 1: using the same model for
+    both roles risks a self-verification circularity the verifier's own LLM choice
+    lets an experiment control for directly."""
+
     name = "self_reflective"
 
     def __init__(self, retriever: DenseRetriever, llm: BaseLLM, verifier: Verifier,
@@ -62,18 +91,23 @@ class SelfReflectiveRAG:
             example_id=docs[0].doc_id if docs else "doc_id")
         return self.llm.complete(prompt, system=system,
                                  max_tokens=self.max_new_tokens,
-                                 temperature=self.temperature).strip()
+                                 temperature=self.temperature,
+                                 purpose="generation").strip()
 
     def run(self, question: str, qid: str = "", on_iteration=None,
            task: str = "qa") -> LoopResult:
-        """Run the loop. `on_iteration(Iteration)` is called after each round, which
-        the interactive mode uses to show progress live."""
+        """Run the loop. Takes only the question text (plus bookkeeping qid/task) -
+        no gold answer or gold evidence is ever in scope, structurally.
+
+        `on_iteration(Iteration)` is called after each round, which the interactive
+        mode uses to show progress live."""
         t0 = time.perf_counter()
-        calls_before = self.llm.n_calls
+        verifier_llm = self.verifier.llm
+        purposes_before = _snapshot(self.llm, verifier_llm)
         query = question
         pool: dict[str, RetrievedDoc] = {}
         iterations: list[Iteration] = []
-        best = (-1.0, "", [], [], None)
+        best = (-1.0, "", [], [], None, [])
         prev_unsupported: int | None = None
         stop_reason = "max_iterations"
 
@@ -91,20 +125,20 @@ class SelfReflectiveRAG:
             answer = self._generate(question, docs, task=task)
             report = self.verifier.run(answer, docs)
 
-            valid = {d.doc_id for d in docs}
-            cited = [c.strip() for m in _CITE.findall(answer) for c in m.split(",")]
-            citations = [c for c in dict.fromkeys(cited) if c in valid]
+            citations = extract_citations(answer, {d.doc_id for d in docs})
             doc_ids = [d.doc_id for d in docs]
+            purposes_now = _snapshot(self.llm, verifier_llm)
 
             it = Iteration(i, query, doc_ids, answer, report,
                            time.perf_counter() - it_start, citations=citations,
-                           llm_calls_so_far=self.llm.n_calls - calls_before)
+                           llm_calls_so_far=sum(purposes_now.values()) - sum(purposes_before.values()),
+                           calls_by_purpose_so_far=_diff(purposes_before, purposes_now))
             iterations.append(it)
             if on_iteration:
                 on_iteration(it)
 
             if report.support_ratio > best[0]:
-                best = (report.support_ratio, answer, doc_ids, citations, report)
+                best = (report.support_ratio, answer, doc_ids, citations, report, docs)
 
             if report.support_ratio >= self.min_support_ratio or not report.unsupported_claims():
                 stop_reason = "verified"
@@ -126,11 +160,15 @@ class SelfReflectiveRAG:
                 break
             query = queries[0]
 
-        _, answer, doc_ids, citations, best_report = best
+        _, answer, doc_ids, citations, best_report, best_docs = best
+        purposes_after = _snapshot(self.llm, verifier_llm)
         return LoopResult(
             qid=qid, question=question, answer=answer, retrieved_ids=doc_ids,
             citations=citations, iterations=iterations, stop_reason=stop_reason,
             seconds=time.perf_counter() - t0,
-            llm_calls=self.llm.n_calls - calls_before,
-            final_report=best_report,
+            llm_calls=sum(purposes_after.values()) - sum(purposes_before.values()),
+            calls_by_purpose=_diff(purposes_before, purposes_after),
+            final_report=best_report, arm=self.name,
+            generator_model=self.llm.name, verifier_model=verifier_llm.name,
+            retrieved=best_docs,
         )

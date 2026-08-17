@@ -8,11 +8,20 @@ Pipeline order (each step consumes the previous step's output):
     python main.py preprocess --dataset hotpotqa           -> data/processed/
     python main.py subset    --dataset hotpotqa --n 200    -> data/subsets/
     python main.py index     --subset <path>               -> <subset>/index_<tag>/
-    python main.py baseline  --subset <path> --index <path> -> results/<name>/
 
 FEVER needs its page dump as well, since it ships claims but not page text:
 
     python main.py download --dataset fever --max-pages 200000
+
+The three-arm experiment comparison itself (Baseline / Retrieval-Only /
+Self-Reflective RAG) is run from scripts/run_subset_experiment.py, not here:
+
+    python scripts/run_subset_experiment.py --dataset fever --comparison
+    python scripts/run_subset_experiment.py --dataset hotpotqa --comparison
+    python scripts/run_subset_experiment.py --dataset custom --comparison
+
+That script auto-builds the subset/index above if they don't exist yet (for
+hotpotqa/fever, once download+preprocess have been run at least once).
 """
 from __future__ import annotations
 
@@ -36,8 +45,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 from src.config.config import (
-    DEFAULT_EMBEDDER, DEFAULT_SEED, DEFAULT_TOP_K,
-    EmbeddingConfig, GenerationConfig, RetrievalConfig, RunConfig,
+    DEFAULT_EMBEDDER, DEFAULT_GENERATOR_MODEL, DEFAULT_SEED, DEFAULT_TOP_K,
+    DEFAULT_VERIFIER_MODEL,
 )
 from src.utils.logging_utils import get_logger
 from src.utils.seed import set_seed
@@ -122,54 +131,25 @@ def cmd_index(args: argparse.Namespace) -> int:
             print(f"  {mark} {d.score:.3f}  {d.doc_id}")
         print("  (* = gold supporting passage)")
 
-    print(f"\nnext:  python main.py baseline --subset {subset} --index {out}")
-    return 0
-
-
-def cmd_baseline(args: argparse.Namespace) -> int:
-    from src.data.subset import load_subset
-    from src.generator.llm import build_llm
-    from src.pipeline.baseline import BaselineRAG, run_baseline
-    from src.retrieval.retriever import DenseRetriever
-
-    set_seed(args.seed)
-    questions, documents = load_subset(args.subset)
-
-    if args.index:
-        retriever = DenseRetriever.load(args.index, backend=args.backend,
-                                        device=args.device, nprobe=args.nprobe)
-        if len(retriever.documents) != len(documents):
-            log.error("index has %d passages but the subset has %d - rebuild the index",
-                      len(retriever.documents), len(documents))
-            return 1
-        embedder_name = retriever.embedder.name
-    else:
-        retriever = DenseRetriever.build(documents, embedder_name=args.embedder,
-                                         backend=args.backend, seed=args.seed,
-                                         device=args.device)
-        embedder_name = args.embedder
-
-    llm = build_llm(args.llm) if args.llm != "hf" else build_llm(args.llm)
-    cfg = RunConfig(
-        name=args.name, subset=str(args.subset), index_dir=str(args.index or ""),
-        seed=args.seed,
-        embedding=EmbeddingConfig(model=embedder_name, device=args.device),
-        retrieval=RetrievalConfig(top_k=args.top_k, backend=retriever.index.backend,
-                                  index_type=retriever.index.index_type),
-        generation=GenerationConfig(model=args.llm, max_new_tokens=args.max_new_tokens),
-    )
-    system = BaselineRAG(retriever, llm, top_k=args.top_k,
-                         max_new_tokens=args.max_new_tokens)
-    summary = run_baseline(system, questions, cfg)
-    print(json.dumps(summary, indent=2))
+    print(f"\nnext:  python scripts/run_subset_experiment.py --dataset "
+          f"{{fever,hotpotqa,custom}} --comparison")
     return 0
 
 
 def _build_systems(args, questions, documents, retriever=None):
-    """Assemble both arms over the same retriever, LLM and prompt.
+    """Assemble all three arms over the same retriever, generator LLM, and prompt.
 
-    Sharing every component is the point: the only difference between the two is the
-    verification loop, so any measured change is attributable to it.
+    Sharing every component is the point: the only difference between BaselineRAG,
+    RetrievalOnlyRAG and SelfReflectiveRAG is retrieval expansion and/or verification,
+    so any measured change is attributable to those mechanisms specifically.
+
+    The generator and verifier are independently configurable (ISSUE 1): `args.llm`
+    (alias `args.generator_llm`) always sets the generator and is never silently
+    changed. `args.verifier_llm`, if unset, defaults to the same spec as the
+    generator (Experiment A - same-model verification, the pre-existing behaviour);
+    set it explicitly to a different model for Experiment B - independent
+    verification. Both are built as their own BaseLLM instances even when the spec is
+    identical, so per-stage call/token/cost accounting is always clean.
 
     `retriever`, if already built (e.g. by `--file` ingestion), is used as-is instead
     of building or loading one from `documents`/`args.index`.
@@ -177,6 +157,7 @@ def _build_systems(args, questions, documents, retriever=None):
     from src.generator.llm import build_llm
     from src.pipeline.baseline import BaselineRAG
     from src.pipeline.refine import QueryReformulator
+    from src.pipeline.retrieval_only import RetrievalOnlyRAG
     from src.pipeline.self_reflective import SelfReflectiveRAG
     from src.pipeline.verifier import Verifier
     from src.retrieval.retriever import DenseRetriever
@@ -194,17 +175,26 @@ def _build_systems(args, questions, documents, retriever=None):
                                              backend=args.backend, seed=args.seed,
                                              device=args.device)
 
-    llm = build_llm(args.llm)
-    verifier = Verifier(llm)
-    baseline = BaselineRAG(retriever, llm, top_k=args.top_k,
+    generator_llm = build_llm(args.llm)
+    verifier_spec = getattr(args, "verifier_llm", None) or args.llm
+    verifier_llm = generator_llm if verifier_spec == args.llm else build_llm(verifier_spec)
+    verifier = Verifier(verifier_llm)
+    expand_k = getattr(args, "expand_k", 3)
+
+    baseline = BaselineRAG(retriever, generator_llm, top_k=args.top_k,
                            max_new_tokens=args.max_new_tokens)
+    retrieval_only = RetrievalOnlyRAG(
+        retriever, generator_llm, top_k=args.top_k,
+        max_iterations=args.max_iterations, expand_k_each_iteration=expand_k,
+        max_new_tokens=args.max_new_tokens)
     proposed = SelfReflectiveRAG(
-        retriever, llm, verifier, QueryReformulator(llm), top_k=args.top_k,
-        max_iterations=args.max_iterations,
+        retriever, generator_llm, verifier, QueryReformulator(generator_llm),
+        top_k=args.top_k, max_iterations=args.max_iterations,
         min_support_ratio=args.min_support_ratio,
         stop_on_no_improvement=not args.no_early_stop,
+        expand_k_each_iteration=expand_k,
         max_new_tokens=args.max_new_tokens)
-    return retriever, llm, verifier, baseline, proposed
+    return retriever, generator_llm, verifier_llm, verifier, baseline, retrieval_only, proposed
 
 
 def cmd_ask(args: argparse.Namespace) -> int:
@@ -241,8 +231,8 @@ def cmd_ask(args: argparse.Namespace) -> int:
     else:
         raise SystemExit("ask requires --file or --subset")
 
-    *_, baseline, proposed = _build_systems(args, questions, documents,
-                                            retriever=retriever)
+    _, _, _, _, baseline, _retrieval_only, proposed = _build_systems(
+        args, questions, documents, retriever=retriever)
 
     if args.questions_file:
         qs = [line.strip() for line in
@@ -250,30 +240,15 @@ def cmd_ask(args: argparse.Namespace) -> int:
               if line.strip()]
         if not qs:
             raise SystemExit(f"{args.questions_file} has no questions (one per line)")
-        rows = batch_table_ask(qs, baseline, proposed)
+        batch_table_ask(qs, baseline, proposed)
     elif args.question:
-        rows = [print_table_report(args.question, baseline, proposed)]
+        print_table_report(args.question, baseline, proposed)
     else:
         intro = (f"File loaded: {args.file} ({len(documents)} passages). "
                  "What would you like to ask about it? (or 'quit' to exit)"
                  if args.file else None)
-        rows = repl_table(baseline, proposed, intro=intro)
+        repl_table(baseline, proposed, intro=intro)
 
-    if args.save_results and rows:
-        from src.utils.io import write_json
-
-        per_question = [{
-            "qid": str(i), "question": r["question"], "task": "qa",
-            "gold_answer": None, "gold_doc_ids": [],
-            "self_reflective": {"confidence": r["confidence"],
-                                "hallucination": r["hallucination"]},
-            "iterations": r["loop_iterations"],
-        } for i, r in enumerate(rows, 1)]
-        write_json(args.save_results, {
-            "meta": {"src_file": args.file or args.subset, "dataset": "custom"},
-            "topk_sweep": [], "per_question": per_question,
-        })
-        log.info("wrote %s (%d questions, ablation-ready)", args.save_results, len(rows))
     return 0
 
 
@@ -301,18 +276,25 @@ def build_parser() -> argparse.ArgumentParser:
                    help="--file only: target passage size in words")
     p.add_argument("--force-reindex", action="store_true",
                    help="--file only: rebuild the cached index even if unchanged")
-    p.add_argument("--save-results", default=None,
-                   help="write each question's self-reflective iteration history to "
-                        "this path, in the shape scripts/ablation_n_iterations.py "
-                        "reads; no gold answers are available here so only "
-                        "confidence/hallucination are ablatable, not em/f1/accuracy")
     p.add_argument("--subset", default=None,
                    help="frozen subset to retrieve over; --file or --subset is required")
     p.add_argument("--index", default=None, help="prebuilt index for that subset")
     p.add_argument("--embedder", default=DEFAULT_EMBEDDER)
-    p.add_argument("--llm", default="openai:gpt-4o-mini",
-                   help="hf:<model_id> | openai:<model>")
+    p.add_argument("--llm", "--generator-llm", dest="llm", default=DEFAULT_GENERATOR_MODEL,
+                   help="generator model: hf:<model_id> | openai:<model>. Never "
+                        "changed silently - defaults to GENERATOR_MODEL if set, else "
+                        "openai:gpt-4o-mini.")
+    p.add_argument("--verifier-llm", default=DEFAULT_VERIFIER_MODEL or None,
+                   help="verifier model, independently configurable from --llm "
+                        "(ISSUE 1). Omitted or blank -> same model as the generator "
+                        "(Experiment A / same-model verification, the default). Set "
+                        "to a different hf:<model_id>/openai:<model> spec for "
+                        "Experiment B / independent verification. Falls back to "
+                        "VERIFIER_MODEL if set.")
     p.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    p.add_argument("--expand-k", type=int, default=3,
+                   help="passages added to k on each later retrieval round, shared "
+                        "identically by the retrieval-only and self-reflective arms")
     p.add_argument("--max-iterations", type=int, default=3)
     p.add_argument("--min-support-ratio", type=float, default=1.0)
     p.add_argument("--no-early-stop", action="store_true",
@@ -369,21 +351,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", default=None)
     p.add_argument("--smoke-test", action="store_true")
     p.set_defaults(func=cmd_index)
-
-    p = sub.add_parser("baseline", help="run single-pass RAG over a subset")
-    p.add_argument("--subset", required=True)
-    p.add_argument("--index", default=None, help="prebuilt index; otherwise built now")
-    p.add_argument("--embedder", default=DEFAULT_EMBEDDER)
-    p.add_argument("--llm", default="openai:gpt-4o-mini",
-                   help="hf:<model_id> | openai:<model>")
-    p.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
-    p.add_argument("--max-new-tokens", type=int, default=320)
-    p.add_argument("--backend", default="auto", choices=["auto", "faiss", "numpy"])
-    p.add_argument("--device", default=None)
-    p.add_argument("--nprobe", type=int, default=10)
-    p.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    p.add_argument("--name", default="baseline")
-    p.set_defaults(func=cmd_baseline)
 
     return ap
 

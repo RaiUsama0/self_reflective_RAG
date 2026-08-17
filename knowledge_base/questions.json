@@ -1,0 +1,146 @@
+[
+  {
+    "id": "q001",
+    "claim": "CityCare General Hospital was founded in 1985.",
+    "label": "SUPPORTS",
+    "evidence": ["hospital.txt"]
+  },
+  {
+    "id": "q002",
+    "claim": "CityCare General Hospital has 500 beds.",
+    "label": "REFUTES",
+    "evidence": ["hospital.txt"]
+  },
+  {
+    "id": "q003",
+    "claim": "CityCare General Hospital's Emergency Department Head is Dr. Olivia Brown.",
+    "label": "SUPPORTS",
+    "evidence": ["hospital.txt"]
+  },
+  {
+    "id": "q004",
+    "claim": "Elmwood State University was founded in 1932.",
+    "label": "SUPPORTS",
+    "evidence": ["university.txt"]
+  },
+  {
+    "id": "q005",
+    "claim": "Elmwood State University's Chancellor is Dr. Samuel Okafor.",
+    "label": "REFUTES",
+    "evidence": ["university.txt"]
+  },
+  {
+    "id": "q006",
+    "claim": "Elmwood State University enrolls approximately 18,000 students.",
+    "label": "SUPPORTS",
+    "evidence": ["university.txt"]
+  },
+  {
+    "id": "q007",
+    "claim": "SkyBridge Airlines is headquartered in Dublin, Ireland.",
+    "label": "SUPPORTS",
+    "evidence": ["airline.txt"]
+  },
+  {
+    "id": "q008",
+    "claim": "SkyBridge Airlines operates long-haul flights to North America.",
+    "label": "REFUTES",
+    "evidence": ["airline.txt"]
+  },
+  {
+    "id": "q009",
+    "claim": "SkyBridge Airlines' Chief Executive Officer is Fiona Walsh.",
+    "label": "SUPPORTS",
+    "evidence": ["airline.txt"]
+  },
+  {
+    "id": "q010",
+    "claim": "The Ares Horizon mission's rover is called Odyssey Rover.",
+    "label": "SUPPORTS",
+    "evidence": ["mars_mission.txt"]
+  },
+  {
+    "id": "q011",
+    "claim": "The Odyssey Rover landed on Mars on 14 March 2031.",
+    "label": "REFUTES",
+    "evidence": ["mars_mission.txt"]
+  },
+  {
+    "id": "q012",
+    "claim": "The Ares Horizon mission's total budget was approximately 2.7 billion dollars.",
+    "label": "SUPPORTS",
+    "evidence": ["mars_mission.txt"]
+  },
+  {
+    "id": "q013",
+    "claim": "Nordvale Technologies is headquartered in Stockholm, Sweden.",
+    "label": "SUPPORTS",
+    "evidence": ["company.txt"]
+  },
+  {
+    "id": "q014",
+    "claim": "Nordvale Technologies was founded by Anna Bergstrom alone.",
+    "label": "REFUTES",
+    "evidence": ["company.txt"]
+  },
+  {
+    "id": "q015",
+    "claim": "Nordvale Technologies acquired PathSync in 2023.",
+    "label": "SUPPORTS",
+    "evidence": ["company.txt"]
+  },
+  {
+    "id": "q016",
+    "claim": "Riverton Metropolitan Transit operates 6 metro lines.",
+    "label": "SUPPORTS",
+    "evidence": ["city_transport.txt"]
+  },
+  {
+    "id": "q017",
+    "claim": "A single metro fare on Riverton Metropolitan Transit costs 5 dollars.",
+    "label": "REFUTES",
+    "evidence": ["city_transport.txt"]
+  },
+  {
+    "id": "q018",
+    "claim": "The Blue Line is the longest metro line in Riverton, running 42 kilometers.",
+    "label": "SUPPORTS",
+    "evidence": ["city_transport.txt"]
+  },
+  {
+    "id": "q019",
+    "claim": "The Northfield Climate Research Institute is based in Oslo, Norway.",
+    "label": "SUPPORTS",
+    "evidence": ["climate_research.txt"]
+  },
+  {
+    "id": "q020",
+    "claim": "The Northfield Climate Research Institute's Director is Dr. Freya Nystrom.",
+    "label": "REFUTES",
+    "evidence": ["climate_research.txt"]
+  },
+  {
+    "id": "q021",
+    "claim": "The Northfield Climate Research Institute operates a field station in the Amazon basin.",
+    "label": "SUPPORTS",
+    "evidence": ["climate_research.txt"]
+  },
+  {
+    "id": "q022",
+    "claim": "The Harrowgate Museum of Natural History first opened in 1887.",
+    "label": "SUPPORTS",
+    "evidence": ["museum.txt"]
+  },
+  {
+    "id": "q023",
+    "claim": "Admission to the Harrowgate Museum of Natural History costs 15 pounds.",
+    "label": "REFUTES",
+    "evidence": ["museum.txt"]
+  },
+  {
+    "id": "q024",
+    "claim": "The Harrowgate Museum's Diplodocus skeleton is nicknamed Hamish.",
+    "label": "SUPPORTS",
+    "evidence": ["museum.txt"]
+  }
+]

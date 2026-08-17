@@ -3,6 +3,7 @@ OpenAI API and needs OPENAI_API_KEY set.
 
     python tests/test_pipeline.py
 """
+import json
 import os
 import sys
 import tempfile
@@ -20,7 +21,9 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 from src.data.ingest import chunk_text, load_file_as_documents
-from src.data.preprocess import clean_fever_text, make_doc_id, normalise_ws
+from src.data.preprocess import (
+    clean_fever_text, make_doc_id, normalise_ws, preprocess_fever,
+)
 from src.embeddings.embedder import TfidfEmbedder, l2_normalize
 from src.generator.llm import (
     BaseLLM, build_llm, extract_json, extract_verdict, format_evidence,
@@ -53,11 +56,11 @@ class ScriptedLLM(BaseLLM):
         return self
 
     def _complete(self, prompt: str, system: str | None,
-                  max_tokens: int, temperature: float) -> str:
+                  max_tokens: int, temperature: float) -> tuple[str, None]:
         for trigger, handler in self.handlers:
             if trigger in prompt:
-                return handler(prompt)
-        return ""
+                return handler(prompt), None
+        return "", None
 
 
 class TestPreprocess(unittest.TestCase):
@@ -65,6 +68,56 @@ class TestPreprocess(unittest.TestCase):
         self.assertEqual(make_doc_id("Marie  Curie"), "Marie_Curie")
         self.assertEqual(clean_fever_text("Paris -LRB- France -RRB-"), "Paris ( France )")
         self.assertEqual(normalise_ws("  a\n b  "), "a b")
+
+    def _write_jsonl(self, path: Path, rows: list[dict]) -> None:
+        path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    def test_fever_collapses_multi_evidence_rows_into_one_question_per_claim(self):
+        """FEVER's raw dump has one row per (claim, valid-evidence-set) pair - the
+        same claim id can appear many times with different evidence_wiki_url values.
+        Regression test for the bug where every row became its own "question",
+        inflating some claims' sampling weight up to ~59x in a real n=200 draw."""
+        with tempfile.TemporaryDirectory() as td:
+            raw_dir = Path(td) / "raw"
+            raw_dir.mkdir()
+            self._write_jsonl(raw_dir / "claims_labelled_dev.jsonl", [
+                {"id": 1, "claim": "Paris is in France.", "label": "SUPPORTS",
+                 "evidence_wiki_url": "Paris"},
+                {"id": 1, "claim": "Paris is in France.", "label": "SUPPORTS",
+                 "evidence_wiki_url": "France"},
+                {"id": 1, "claim": "Paris is in France.", "label": "SUPPORTS",
+                 "evidence_wiki_url": "Paris"},
+                {"id": 2, "claim": "The sky is green.", "label": "REFUTES",
+                 "evidence_wiki_url": "Sky"},
+                {"id": 3, "claim": "Unverifiable claim.", "label": "NOT ENOUGH INFO",
+                 "evidence_wiki_url": None},
+            ])
+            self._write_jsonl(raw_dir / "wiki_pages.jsonl", [
+                {"title": "Paris", "text": "Paris is the capital of France."},
+                {"title": "France", "text": "France is a country in Europe."},
+                {"title": "Sky", "text": "The sky is blue during the day."},
+            ])
+
+            out_dir = preprocess_fever(raw_dir=raw_dir, out_dir=Path(td) / "out")
+            questions = [json.loads(l) for l in
+                        (out_dir / "questions.jsonl").read_text(encoding="utf-8").splitlines()]
+
+            self.assertEqual(len(questions), 2)
+            by_qid = {q["qid"]: q for q in questions}
+            self.assertEqual(sorted(by_qid["1"]["gold_doc_ids"]), ["France", "Paris"])
+            self.assertEqual(by_qid["2"]["gold_doc_ids"], ["Sky"])
+
+    def test_fever_rejects_inconsistent_labels_for_the_same_claim_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            raw_dir = Path(td) / "raw"
+            raw_dir.mkdir()
+            self._write_jsonl(raw_dir / "claims_labelled_dev.jsonl", [
+                {"id": 1, "claim": "x", "label": "SUPPORTS", "evidence_wiki_url": "A"},
+                {"id": 1, "claim": "x", "label": "REFUTES", "evidence_wiki_url": "B"},
+            ])
+            self._write_jsonl(raw_dir / "wiki_pages.jsonl", [])
+            with self.assertRaises(ValueError):
+                preprocess_fever(raw_dir=raw_dir, out_dir=Path(td) / "out")
 
 
 class TestIngest(unittest.TestCase):

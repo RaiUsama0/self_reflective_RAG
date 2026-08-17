@@ -88,6 +88,22 @@ def preprocess_fever(split: str = "labelled_dev", raw_dir: Path | None = None,
     evidence, so retrieval recall is undefined for them. Report that filter in the
     methodology.
 
+    FEVER's raw claims dump has one row per (claim, valid-evidence-set) pair, not one
+    row per claim: a claim with several independently-sufficient evidence sets
+    appears as several rows sharing the same `id`, same `claim` text, and same
+    `label`, differing only in `evidence_wiki_url` (observed up to 59x for one claim
+    in labelled_dev). Treating each row as its own question - the original version of
+    this function did - inflates some claims' sampling weight by up to 59x relative
+    to a claim with a single annotated evidence set, silently violating the
+    independent-observations assumption behind every paired significance test run
+    downstream. Rows are grouped by id here and collapsed into one question per
+    unique claim, with `gold_doc_ids` as the union of every valid evidence document
+    across the group - consistent with how HotpotQA's multi-hop gold sets are already
+    handled, meaning `all_gold_retrieved` requires every valid evidence document to
+    be retrieved, not just one complete evidence set (a deliberately stricter
+    standard than FEVER's own official "any one complete set" scoring, chosen for
+    consistency with the rest of this codebase rather than to flatter the numbers).
+
     Skips reprocessing if corpus.jsonl and questions.jsonl already exist, unless
     `force=True`.
     """
@@ -108,24 +124,36 @@ def preprocess_fever(split: str = "labelled_dev", raw_dir: Path | None = None,
             for row in read_jsonl(pages_path))
     n_docs = write_jsonl(out_dir / "corpus.jsonl", docs)
 
-    questions = []
+    groups: dict[str, dict] = {}
     n_dropped = 0
+    n_rows = 0
     for row in read_jsonl(claims_path):
+        n_rows += 1
         if row["label"] not in ("SUPPORTS", "REFUTES"):
             n_dropped += 1
             continue
-        gold = [make_doc_id(row["evidence_wiki_url"])] if row.get("evidence_wiki_url") else []
-        questions.append({
-            "qid": str(row["id"]),
-            "question": normalise_ws(row["claim"]),
-            "answer": row["label"],
-            "gold_doc_ids": gold,
-            "meta": {"task": "fact_verification", "dataset": "fever"},
+        qid = str(row["id"])
+        group = groups.setdefault(qid, {
+            "qid": qid, "question": normalise_ws(row["claim"]), "answer": row["label"],
+            "gold_doc_ids": [], "meta": {"task": "fact_verification", "dataset": "fever"},
         })
+        if row["label"] != group["answer"]:
+            raise ValueError(
+                f"claim id {qid} has inconsistent labels across rows "
+                f"({group['answer']!r} vs {row['label']!r}) - the group-by-id "
+                "collapse assumes one label per claim id; investigate before "
+                "reprocessing.")
+        if row.get("evidence_wiki_url"):
+            doc_id = make_doc_id(row["evidence_wiki_url"])
+            if doc_id not in group["gold_doc_ids"]:
+                group["gold_doc_ids"].append(doc_id)
+
+    questions = sorted(groups.values(), key=lambda q: q["qid"])
     n_q = write_jsonl(out_dir / "questions.jsonl", questions)
     write_json(out_dir / "meta.json",
                {"dataset": "fever", "split": split, "n_documents": n_docs,
-                "n_questions": n_q, "n_dropped_not_enough_info": n_dropped})
-    log.info("fever -> %s  (%d passages, %d claims, %d NEI dropped)",
-             out_dir, n_docs, n_q, n_dropped)
+                "n_raw_rows": n_rows, "n_questions": n_q,
+                "n_dropped_not_enough_info_rows": n_dropped})
+    log.info("fever -> %s  (%d passages, %d raw rows collapsed to %d unique claims, "
+             "%d NEI rows dropped)", out_dir, n_docs, n_rows, n_q, n_dropped)
     return out_dir

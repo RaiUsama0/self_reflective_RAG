@@ -46,7 +46,8 @@ class Verifier:
             return []
         raw = self.llm.complete(
             DECOMPOSE_TEMPLATE.format(answer=answer), system=DECOMPOSE_SYSTEM,
-            max_tokens=self.max_new_tokens, temperature=self.temperature)
+            max_tokens=self.max_new_tokens, temperature=self.temperature,
+            purpose="decompose")
         data = extract_json(raw, default=None)
         claims: list[str] = []
         if isinstance(data, dict):
@@ -63,7 +64,7 @@ class Verifier:
         raw = self.llm.complete(
             VERIFIER_TEMPLATE.format(evidence=format_evidence(docs), claims=numbered),
             system=VERIFIER_SYSTEM, max_tokens=self.max_new_tokens,
-            temperature=self.temperature)
+            temperature=self.temperature, purpose="verify")
         data = extract_json(raw, default=None)
         items = data.get("verdicts", []) if isinstance(data, dict) else (data or [])
         valid_ids = {d.doc_id for d in docs}

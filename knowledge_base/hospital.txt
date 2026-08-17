@@ -1,92 +1,27 @@
-=====================================================
-CityCare General Hospital Knowledge Base
-=====================================================
-
-Hospital Name:
 CityCare General Hospital
 
-Location:
-Manchester, United Kingdom
+CityCare General Hospital is located in Manchester, United Kingdom. It was founded
+in 1985. The hospital has a capacity of 420 beds.
 
-Founded:
-1998
+The Medical Director is Dr. Robert Evans. The Emergency Department Head is
+Dr. Olivia Brown.
 
-Hospital Capacity:
-450 beds
+Departments include Emergency Medicine, Cardiology, Neurology, Pediatrics, and
+Radiology.
 
-Medical Director:
-Dr. Robert Evans
+The Radiology department operates 3 Siemens MRI scanners. The MRI department is
+open Monday to Friday, 8:00 AM to 6:00 PM.
 
-Emergency Department Head:
-Dr. Olivia Brown
+Laboratory turnaround times: COVID PCR results are usually available within
+24 hours. Blood test results are usually available within 6 hours. CT scan results
+are usually available within 12 hours.
 
-Departments:
-- Emergency Medicine
-- Cardiology
-- Neurology
-- Pediatrics
-- Radiology
+Emergency policy: patients with life-threatening conditions must be treated
+immediately regardless of insurance status.
 
-MRI Department
+Visiting hours are 2 PM to 7 PM on weekdays and 10 AM to 7 PM on weekends.
 
-MRI Machines:
-3 Siemens Magnetom scanners
+Parking is free for emergency patients. General visitors pay 5 pounds per day.
 
-Operating Hours:
-Monday-Friday
-8:00 AM - 6:00 PM
-
-Laboratory
-
-COVID PCR Results:
-Usually available within 24 hours.
-
-Blood Test Results:
-Usually available within 6 hours.
-
-CT Scan Results:
-Usually available within 12 hours.
-
-Emergency Policy
-
-Patients with life-threatening conditions must be treated immediately regardless of insurance status.
-
-Visitors
-
-Weekdays:
-2 PM - 7 PM
-
-Weekends:
-10 AM - 7 PM
-
-Parking
-
-Parking is free for emergency patients.
-
-General visitors pay £5 per day.
-
-Pharmacy
-
-Open:
-Monday-Saturday
-
-9:00 AM - 8:00 PM
-
-Closed on Sundays.
-
-Radiology
-
-Provides:
-MRI
-CT Scan
-Ultrasound
-X-Ray
-
-Hospital Cafeteria
-
-Open:
-7:00 AM - 8:00 PM
-
-=====================================================
-END
-=====================================================
+The hospital pharmacy is open Monday to Saturday, 9:00 AM to 8:00 PM, and is closed
+on Sundays.

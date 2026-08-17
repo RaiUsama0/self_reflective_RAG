@@ -1,45 +1,28 @@
-University: Northbridge University
+Elmwood State University
 
-Location: Birmingham, UK
+Elmwood State University is located in Bristol, United Kingdom. It was founded in
+1932. The university currently enrolls approximately 18,000 students.
 
-Founded: 1965
+The Chancellor is Professor Margaret Hayes. The Dean of Engineering is
+Dr. Samuel Okafor.
 
-Vice Chancellor:
-Professor Linda Walker
+The university has six faculties: Engineering, Sciences, Arts and Humanities,
+Law, Medicine, and Business.
 
-Students:
-18,500
+The main library, the Ashcombe Library, holds over 1.2 million printed volumes and
+is open 24 hours a day during term time.
 
-Schools:
-Engineering
-Business
-Medicine
-Law
-Computer Science
+Tuition fees for undergraduate students are 9,250 pounds per year for UK students
+and 22,000 pounds per year for international students.
 
-Library
+The Computer Science department was ranked 5th nationally in the most recent
+government research assessment.
 
-Opening Hours:
-Monday-Friday
-8 AM - 10 PM
+The university's academic year is divided into three terms: Autumn, Spring, and
+Summer. Autumn term begins in the last week of September.
 
-Saturday
-9 AM - 6 PM
+Student accommodation on campus houses approximately 4,500 students across nine
+residence halls.
 
-Sunday
-Closed
-
-Attendance Policy
-
-Students must maintain at least 75% attendance.
-
-Late Submission Policy
-
-Up to 24 hours late:
-10% deduction
-
-More than 24 hours:
-Zero marks unless an approved extension exists.
-
-Tuition Fee (MSc):
-£12,700
+The university's sports centre includes an Olympic-sized swimming pool and was
+completed in 2011.
