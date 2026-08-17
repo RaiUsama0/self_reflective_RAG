@@ -6,9 +6,6 @@ custom FEVER-like knowledge base.
     python scripts/run_subset_experiment.py --dataset hotpotqa --comparison
     python scripts/run_subset_experiment.py --dataset custom --comparison
 
-    # Experiment B - independent verifier (a different model judges the generator):
-    python scripts/run_subset_experiment.py --dataset fever --comparison --verifier independent
-
     # verbose per-question/retrieval/indexing logging instead of the clean summary:
     python scripts/run_subset_experiment.py --dataset custom --comparison --debug
 
@@ -53,16 +50,8 @@ after generation, purely to compute metrics - never before, never passed to any
 retriever/generator/verifier call. See tests/test_arms.py::TestNoGoldLeakage and
 tests/test_custom_dataset.py::TestNoGoldLeakageCustomDataset for the structural proof.
 
-The generator and verifier are independently configurable - not a separate experiment
-mode, just a parameter of the one comparison every invocation runs, same as --top-k
-or --max-iterations:
-
-    --verifier same (default)   verifier uses the same model as the generator
-                                 (Experiment A - tests the loop with no independence
-                                 assumption at all)
-    --verifier independent      verifier uses DEFAULT_INDEPENDENT_VERIFIER_MODEL, a
-                                 different model from the generator (Experiment B)
-    --verifier-llm <spec>       explicit override, takes precedence over --verifier
+The verifier always uses the same model as the generator (--llm) - an independently
+configurable verifier is out of scope for this dissertation.
 """
 from __future__ import annotations
 
@@ -88,9 +77,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 from src.config.config import (
-    DEFAULT_GENERATOR_MODEL, DEFAULT_INDEPENDENT_VERIFIER_MODEL, DEFAULT_VERIFIER_MODEL,
-    EmbeddingConfig, GenerationConfig, ModelConfig, PROCESSED_DIR, RESULTS_DIR,
-    RetrievalConfig, RunConfig, SUBSETS_DIR,
+    DEFAULT_GENERATOR_MODEL, EmbeddingConfig, GenerationConfig, ModelConfig,
+    PROCESSED_DIR, RESULTS_DIR, RetrievalConfig, RunConfig, SUBSETS_DIR,
 )
 from src.data.custom_dataset import build_custom_subset
 from src.data.subset import build_subset, load_subset
@@ -458,21 +446,6 @@ def _resolve_subset(dataset: str, n: int, seed: int) -> tuple[Path, Path]:
     return subset_dir, index_dir
 
 
-def resolve_verifier_spec(verifier_mode: str, verifier_llm_override: str | None,
-                          generator_spec: str) -> str | None:
-    """--verifier-llm, if given, always wins (it is the precise, explicit form).
-    Otherwise --verifier same/independent picks the model: same -> None (run_
-    experiment() then defaults the verifier to the generator's own spec, Experiment
-    A); independent -> DEFAULT_INDEPENDENT_VERIFIER_MODEL (Experiment B), reusing the
-    existing independent-verifier machinery (ModelConfig.verifier_is_independent,
-    separate BaseLLM instances in run_experiment()) rather than a new one."""
-    if verifier_llm_override:
-        return verifier_llm_override
-    if verifier_mode == "independent":
-        return DEFAULT_INDEPENDENT_VERIFIER_MODEL
-    return None
-
-
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -485,11 +458,6 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--debug", action="store_true",
                     help="verbose per-question/retrieval/indexing output instead of "
                          "the clean summary - a logging mode, not a second experiment")
-    ap.add_argument("--verifier", choices=["same", "independent"], default="same",
-                    help="'same' (default): verifier uses the same model as the "
-                         "generator (Experiment A). 'independent': verifier uses "
-                         f"{DEFAULT_INDEPENDENT_VERIFIER_MODEL} (Experiment B). "
-                         "Overridden by --verifier-llm if that is also given.")
     ap.add_argument("--n", type=int, default=200,
                     help="fever/hotpotqa only: frozen subset size")
     ap.add_argument("--kb-dir", default=str(PROJECT_ROOT / "knowledge_base"),
@@ -498,10 +466,8 @@ def parse_args() -> argparse.Namespace:
                     help="custom only: path to the id/claim/label/evidence JSON "
                          "array; defaults to <kb-dir>/questions.json")
     ap.add_argument("--llm", "--generator-llm", dest="llm", default=DEFAULT_GENERATOR_MODEL,
-                    help="generator model - never changed silently")
-    ap.add_argument("--verifier-llm", default=DEFAULT_VERIFIER_MODEL or None,
-                    help="explicit verifier model override; takes precedence over "
-                         "--verifier")
+                    help="generator model - never changed silently. The verifier "
+                         "always uses this same model.")
     ap.add_argument("--top-k", type=int, default=5)
     ap.add_argument("--expand-k", type=int, default=3)
     ap.add_argument("--max-iterations", type=int, default=3)
@@ -539,9 +505,8 @@ def main() -> int:
         else:
             subset_dir, index_dir = _resolve_subset(args.dataset, args.n, args.seed)
 
-        verifier_spec = resolve_verifier_spec(args.verifier, args.verifier_llm, args.llm)
         out_dir = run_experiment(
-            subset_dir, index_dir, args.llm, verifier_spec, top_k=args.top_k,
+            subset_dir, index_dir, args.llm, None, top_k=args.top_k,
             expand_k=args.expand_k, max_iterations=args.max_iterations,
             min_support_ratio=args.min_support_ratio, backend=args.backend,
             seed=args.seed, name=args.name or subset_dir.name, quiet=quiet)

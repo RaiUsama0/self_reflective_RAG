@@ -31,8 +31,6 @@ DEFAULT_TOP_K = 5
 
 DEFAULT_GENERATOR_MODEL = os.environ.get("GENERATOR_MODEL", "openai:gpt-4o-mini")
 DEFAULT_VERIFIER_MODEL = os.environ.get("VERIFIER_MODEL", "")
-DEFAULT_INDEPENDENT_VERIFIER_MODEL = os.environ.get(
-    "INDEPENDENT_VERIFIER_MODEL", "openai:gpt-4.1-mini")
 
 
 @dataclass

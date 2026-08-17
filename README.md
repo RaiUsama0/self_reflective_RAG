@@ -3,7 +3,7 @@
 MSc dissertation project — Rai Usama, Keele University (CSC-44120).
 Supervisor: Marco Ortolani.
 
-Current status: environment, data pipeline, three experimental arms (baseline, retrieval-only, self-reflective), independent generator/verifier configuration (--verifier independent), the custom FEVER-like knowledge-base benchmark, and human validation of the verifier are implemented. The full FEVER n=200 comparison — including statistical significance testing — has been run. Still to do: the equivalent full-scale HotpotQA n=200 comparison, and the independent-verifier comparison at n=200 (validated so far only at small scale).
+Current status: environment, data pipeline, three experimental arms (baseline, retrieval-only, self-reflective), and the custom FEVER-like knowledge-base benchmark are implemented, and human validation of the verifier has been done. The full FEVER n=200 comparison — including statistical significance testing — has been run. Still to do: the equivalent full-scale HotpotQA n=200 comparison. An independently-configurable verifier ("Experiment B") is out of scope for this dissertation; the verifier always uses the same model as the generator.
 
 ## Experimental arms
 
@@ -88,13 +88,12 @@ src/utils/                   logging, seeding, IO, checksums, schema, env check
 main.py                      CLI entry point for every stage
 
 scripts/run_subset_experiment.py  the 3-arm comparison over a frozen subset
-scripts/ablation_n_iterations.py  N-iteration cost/benefit sweep (0/1/2/3 rounds)
 scripts/analyze_results.py        significance tests + plots + standardized results table
-scripts/verifier_agreement.py     claim-level agreement between two verifier models
-scripts/run_verifier_independence.py  Experiment A vs B, end to end
 
 tests/test_pipeline.py       preprocessing, retrieval, metrics, verifier defensive parsing
-tests/test_arms.py           all 3 arms, stopping rules, independent verifier config, gold-leakage proof, cost tracking
+tests/test_arms.py           all 3 arms, stopping rules, gold-leakage proof, cost tracking
+tests/test_cli.py            CLI parsing, --comparison/--debug, clean quiet output
+tests/test_custom_dataset.py custom knowledge-base loader, gold-leakage proof
 ```
 
 ## Environment variables
@@ -102,6 +101,6 @@ tests/test_arms.py           all 3 arms, stopping rules, independent verifier co
 | Variable | Meaning |
 |---|---|
 | `GENERATOR_MODEL` | default generator model spec (e.g. `openai:gpt-4o-mini`); never overridden silently — CLI flags still win |
-| `VERIFIER_MODEL` | default verifier model spec; unset/blank = same model as the generator (Experiment A) |
+| `VERIFIER_MODEL` | default verifier model spec for `main.py ask`; unset/blank = same model as the generator. `scripts/run_subset_experiment.py` always uses the generator's model - an independently-configurable verifier is out of scope for this dissertation. |
 | `OPENAI_API_KEY` | required for any `openai:<model>` spec |
 

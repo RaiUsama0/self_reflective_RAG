@@ -1,7 +1,11 @@
 """Tests for run_subset_experiment.py's unified CLI: --dataset {fever,hotpotqa,custom}
-parsing, --comparison/--debug, --verifier same/independent resolution, and that quiet
-mode actually produces no terminal output (not just "should" - captured and asserted).
-Fully offline - build_llm is monkeypatched so no network/API key is needed.
+parsing, --comparison/--debug, and that quiet mode actually produces no terminal
+output (not just "should" - captured and asserted). Fully offline - build_llm is
+monkeypatched so no network/API key is needed.
+
+An independently-configurable verifier ("Experiment B") is explicitly out of
+dissertation scope - the verifier always uses the same model as the generator, and
+TestArgumentParsing.test_no_verifier_flags_exist guards against it being reintroduced.
 
     python tests/test_cli.py
 """
@@ -28,7 +32,6 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
 import run_subset_experiment as rse
-from src.config.config import DEFAULT_INDEPENDENT_VERIFIER_MODEL
 from src.generator.llm import BaseLLM
 from src.utils.io import write_json, write_jsonl
 
@@ -44,7 +47,6 @@ class TestArgumentParsing(unittest.TestCase):
         self.assertEqual(args.dataset, "fever")
         self.assertTrue(args.comparison)
         self.assertFalse(args.debug)
-        self.assertEqual(args.verifier, "same")
 
     def test_hotpotqa_comparison(self):
         _set_argv("--dataset", "hotpotqa", "--comparison")
@@ -61,10 +63,14 @@ class TestArgumentParsing(unittest.TestCase):
         args = rse.parse_args()
         self.assertTrue(args.debug)
 
-    def test_verifier_independent_flag(self):
-        _set_argv("--dataset", "fever", "--comparison", "--verifier", "independent")
-        args = rse.parse_args()
-        self.assertEqual(args.verifier, "independent")
+    def test_no_verifier_flags_exist(self):
+        """An independently-configurable verifier ("Experiment B") is out of
+        dissertation scope - guards against --verifier/--verifier-llm being
+        reintroduced to this script's CLI."""
+        for flag in ("--verifier", "--verifier-llm"):
+            _set_argv("--dataset", "fever", "--comparison", flag, "independent")
+            with self.assertRaises(SystemExit):
+                rse.parse_args()
 
     def test_missing_dataset_errors(self):
         _set_argv("--comparison")
@@ -83,25 +89,6 @@ class TestArgumentParsing(unittest.TestCase):
         _set_argv("--dataset", "fever", "--baseline")
         with self.assertRaises(SystemExit):
             rse.parse_args()
-
-
-class TestVerifierResolution(unittest.TestCase):
-    def test_same_resolves_to_none(self):
-        self.assertIsNone(rse.resolve_verifier_spec("same", None, "openai:gpt-4o-mini"))
-
-    def test_independent_resolves_to_distinct_default_model(self):
-        spec = rse.resolve_verifier_spec("independent", None, "openai:gpt-4o-mini")
-        self.assertEqual(spec, DEFAULT_INDEPENDENT_VERIFIER_MODEL)
-        self.assertNotEqual(spec, "openai:gpt-4o-mini")
-
-    def test_explicit_verifier_llm_overrides_verifier_mode(self):
-        spec = rse.resolve_verifier_spec("independent", "openai:custom-model",
-                                         "openai:gpt-4o-mini")
-        self.assertEqual(spec, "openai:custom-model")
-
-    def test_explicit_verifier_llm_overrides_even_when_mode_is_same(self):
-        spec = rse.resolve_verifier_spec("same", "openai:custom-model", "openai:gpt-4o-mini")
-        self.assertEqual(spec, "openai:custom-model")
 
 
 class RecordingLLM(BaseLLM):

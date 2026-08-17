@@ -143,13 +143,13 @@ def _build_systems(args, questions, documents, retriever=None):
     RetrievalOnlyRAG and SelfReflectiveRAG is retrieval expansion and/or verification,
     so any measured change is attributable to those mechanisms specifically.
 
-    The generator and verifier are independently configurable (ISSUE 1): `args.llm`
-    (alias `args.generator_llm`) always sets the generator and is never silently
-    changed. `args.verifier_llm`, if unset, defaults to the same spec as the
-    generator (Experiment A - same-model verification, the pre-existing behaviour);
-    set it explicitly to a different model for Experiment B - independent
-    verification. Both are built as their own BaseLLM instances even when the spec is
-    identical, so per-stage call/token/cost accounting is always clean.
+    The generator and verifier are independently configurable: `args.llm` (alias
+    `args.generator_llm`) always sets the generator and is never silently changed.
+    `args.verifier_llm`, if unset, defaults to the same spec as the generator
+    (same-model verification, the pre-existing behaviour); set it explicitly to a
+    different model for independent verification. Both are built as their own
+    BaseLLM instances even when the spec is identical, so per-stage call/token/cost
+    accounting is always clean.
 
     `retriever`, if already built (e.g. by `--file` ingestion), is used as-is instead
     of building or loading one from `documents`/`args.index`.
@@ -285,11 +285,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "changed silently - defaults to GENERATOR_MODEL if set, else "
                         "openai:gpt-4o-mini.")
     p.add_argument("--verifier-llm", default=DEFAULT_VERIFIER_MODEL or None,
-                   help="verifier model, independently configurable from --llm "
-                        "(ISSUE 1). Omitted or blank -> same model as the generator "
-                        "(Experiment A / same-model verification, the default). Set "
-                        "to a different hf:<model_id>/openai:<model> spec for "
-                        "Experiment B / independent verification. Falls back to "
+                   help="verifier model, independently configurable from --llm. "
+                        "Omitted or blank -> same model as the generator (the "
+                        "default). Set to a different hf:<model_id>/openai:<model> "
+                        "spec for independent verification. Falls back to "
                         "VERIFIER_MODEL if set.")
     p.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     p.add_argument("--expand-k", type=int, default=3,

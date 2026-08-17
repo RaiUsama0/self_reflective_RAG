@@ -30,9 +30,9 @@ from .verifier import Verifier
 
 def _snapshot(*llms: BaseLLM) -> dict[str, int]:
     """Per-purpose call counts summed across one or more LLM instances - used both
-    when the generator and verifier are the same object (Experiment A) and when they
-    are genuinely separate ones (Experiment B); purpose tags, not object identity,
-    are what distinguish generation/decompose/verify/reformulate calls.
+    when the generator and verifier are the same object and when they are genuinely
+    separate ones; purpose tags, not object identity, are what distinguish
+    generation/decompose/verify/reformulate calls.
 
     De-duplicates by object identity first: when generator and verifier share one
     instance, summing its calls_by_purpose twice would double-count every call.
