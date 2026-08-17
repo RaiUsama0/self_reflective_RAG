@@ -3,10 +3,7 @@
 MSc dissertation project — Rai Usama, Keele University (CSC-44120).
 Supervisor: Marco Ortolani.
 
-**Current status:** environment, data pipeline, three experimental arms (baseline,
-retrieval-only, self-reflective), independent generator/verifier configuration, the
-N-iteration ablation, and human validation of the verifier are implemented. Still to
-do: the full-scale experimental comparison over HotpotQA and FEVER at n=200.
+Current status: environment, data pipeline, three experimental arms (baseline, retrieval-only, self-reflective), independent generator/verifier configuration (--verifier independent), the custom FEVER-like knowledge-base benchmark, and human validation of the verifier are implemented. The full FEVER n=200 comparison — including statistical significance testing — has been run. Still to do: the equivalent full-scale HotpotQA n=200 comparison, and the independent-verifier comparison at n=200 (validated so far only at small scale).
 
 ## Experimental arms
 
